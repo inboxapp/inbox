@@ -52,7 +52,9 @@ Here's how to set up a development environment running on your local machine:
 
 9. `sudo ./setup.sh` to install dependencies and create databases.
 
-10. `bin/inbox-start`
+10. `export PYTHONPATH=$(pwd)` to ensure that inbox executables can find the `inbox` package.
+
+11. `bin/inbox-start`
 
 And _voilà_! Auth an account via the commandline and start syncing:
 
