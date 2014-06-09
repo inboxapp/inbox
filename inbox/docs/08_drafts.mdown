@@ -2,6 +2,8 @@ Title: Drafts
 
 A draft is a special kind of message which has not been sent, and therefore its body is mutable.
 
+    //What does 'body is mutable' mean? Is your draft any different than a typical, standard, all know email draft? Either specify that it is different or explina it refers to a normal draft
+
 To get a list of all threads with drafts, use the [Threads](#threads) API call with a tag [filter](#filters) that specifies `draft`, like so:
 
     https://api.inboxapp.com/n/<namespace_id>/threads?tag=drafts
@@ -39,14 +41,20 @@ To get a list of all threads with drafts, use the [Threads](#threads) API call w
 
 A successful response will contain the newly created [Draft](#draft) object.
 
+    // The note below is kind of random; sounds like a side note while it's not. It needs to be specified about creating an email and sending it that these fields are necessary/required. 
+    
 Note that `subject`, `to`, `body`, `files` are all optional fields.
 
 Also note that creating a draft will fail if the referenced `files` ids have not been uploaded. See [Files](#files) for more details on how to upload and reference attachments.
+
+    //Where do these files need to be uploaded to?
 
 
 ### Creating a reply to an existing thread
 
 If the draft is a response to a message in a thread, you should provide the thread's ID in the `reply_to_thread` parameter and omit the `subject` parameter. Messages you create or send __should not include quoted text__ when they are in reply to an existing thread.
+
+    // Under what scenario would someone try to edit a draft atht doens't exist? I don't understand the point of that statement.
 
 ```
 :::json
@@ -81,5 +89,7 @@ If the draft does not exist, this request will fail.
 
 
 # Sending a draft
+
+// Sounds like a sales pitch. 
 
 The Inbox API provides a single API for sending new messages and draft messages. See [Sending](#sending) for more information.
