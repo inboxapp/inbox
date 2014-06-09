@@ -42,6 +42,8 @@ Messages are a sub-object of threads. The content of a message is immutable (wit
 
 #Retrieving Many Messages
 
+    // When you say 'this API supports' are you refering to Inbox API? It makes it sound as if you are pointing to another API actually. Be direct and specific. Also, where did these filters come from? How are they different from tags?!
+
 This API supports [Filters](#filters), making it easy to return a subset of messages matching your needs. You should specify one or more filter parameters to return messages from a specific sender, with a particular subject, etc.
 
     GET  https://api.inboxapp.com/n/<namespace_id>/messages?filter_string
@@ -60,6 +62,8 @@ This API supports [Filters](#filters), making it easy to return a subset of mess
 ```
 
 #Retrieving Messages in a Thread
+
+    // I think I understand; I suggest name change for this filter as stating 'Specifying a thread allows you to request all the messages in that thread.' is VERY confusing.
 
 One of the filter parameters available on messages is `thread`. Specifying a thread allows you to request all the messages in that thread.
 
