@@ -1,6 +1,10 @@
 Title: Tags
 
+    //Why are tags 05 and threads 06? 
+
 Tags are the primary way of storing metadata on a specific thread. They are generally used to group threads with some criteria.
+
+    //Give criteria example. Don't be vague. 
 
 # Getting all tags
 
@@ -64,6 +68,7 @@ These are an extended version of [RFC-6154](http://tools.ietf.org/html/rfc6154),
 * **`trash`**
 * **`file`**
 
+    // Are the above a sample of possible tags or is it all? It should be all, for good measure.
 
 # Read-only tags
 
