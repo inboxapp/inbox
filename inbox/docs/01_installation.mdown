@@ -16,11 +16,15 @@ You can run Inbox almost anywhere. Here's how to install install a development e
 
     At this point you should be SSH'd into a shiny new Ubuntu 12.04 VM. The
     `inbox` directory you started with should be synced to `/vagrant`.
+    
+    //How can I check if it's actually synced? Is there a comment I can run, or will it just show it to me in the concole at this point?
 
     If not, run `vagrant reload` and `vagrant ssh` again. You should see the
     shared folder now.
 
 7. `cd /vagrant`
+
+    //Some commands have an explination what they do some don't for consistancy include a simple explinaiton if the need be too. No? 'Change the vegrant directory'
 
 8. `cp config-sample.cfg config.cfg` to setup a default configuration file. These intial values should be ok for most users.
 
@@ -34,4 +38,4 @@ You can run Inbox almost anywhere. Here's how to install install a development e
 
         ./inbox sync start ben.bitdiddle1861@gmail.com
 
-11. In a separate shell, start the API server by running `./inbox api`. You're now ready to make requests! 
+11. In a separate shell, start the API server by running `./inbox api`. **You're now ready to make requests!** 
