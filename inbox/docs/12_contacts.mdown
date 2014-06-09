@@ -5,6 +5,8 @@ The Inbox API provides access to the user's contacts, making it easy to add cont
 # Retrieving contacts
 
     GET https://api.inboxapp.com/n/<namespace_id>/contacts
+    
+    //Wait, yes I'd like to have access to their contacts but how do I do that? With the snippet above? Be more clear please.
 
 Fetch the user's contact list. This API supports query parameters which make it easy to search the user's contacts. Available query parameters are listed below:
 
@@ -41,6 +43,8 @@ Two calls to `/contacts?order=rank` are not guaranteed to return the same result
 
 Fetch data for the contact with the specified ID.
 
+    //The tone of voice has changed in this document from the previous ones. Will have to be unified.
+
 **Sample response:**
 ```
 ::json
@@ -54,6 +58,8 @@ Fetch data for the contact with the specified ID.
 ```
 
 # Creating a contact
+
+    //Oh my, total lack of context here
 
     POST https://api.inboxapp.com/n/<namespace_id>/contacts/
 
