@@ -1,5 +1,7 @@
 Title: Files
 
+	//Hmmm.. no intro, so far these thins had at least a sentence or two of an introduction to what this is about. What are files about?!
+
 # Retrieving a file
 
     GET https://api.inboxapp.com/n/<namespace_id>/files/<file_id>
@@ -22,6 +24,8 @@ Title: Files
 
 # Retrieving many files
 
+	//Here we have this again. Tisk tisk. THe note on the 
+
 This API supports [filters](#filters), allowing you to fetch multiple files matching specific critera. For example, the following will return all zip files. Note the `/` character in the content type has been replaced by the [percent-encoded](http://en.wikipedia.org/wiki/Percent-encoding) value `%2F`.
 
     GET https://api.inboxapp.com/n/<namespace_id>/files?content_type=application%2Fzip
@@ -41,6 +45,8 @@ Files can be downloaded by appending `/download` to the URI. The body response w
 # Uploading a new file
 
     POST https://api.inboxapp.com/n/<namespace_id>/files
+    
+    //"This API..." What API?
 
 This API is used to transfer files to Inbox in order to add them to a draft message. Data should be sent as multipart-form data with a single file field named `file`. An example of a correct request is shown below:
 
@@ -56,6 +62,8 @@ This API is used to transfer files to Inbox in order to add them to a draft mess
     <<<Binary data here>>>
 
 A successful upload will return an array with a single file object. This object's ID should be added to subsequent [draft updates](#drafts) to attach the file to a draft before sending.
+
+//Wait, how did we get into draft? How does this differ from a typical email massage, does it differ at all?
 
 ```
 :::json
