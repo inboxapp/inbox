@@ -1,5 +1,6 @@
 Title: Errors
 
+  //Consider writing even more specific errors. Unless developers don't mind these. Hard to say if these are informative enough
 
 Inbox uses conventional HTTP response codes to indicate the success or failure of an API request.
 
