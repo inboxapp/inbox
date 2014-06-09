@@ -10,3 +10,5 @@ before submitting patches. (It's simliar to other projects, like NodeJS.)
 We maintain strict code style, following [pep8](http://legacy.python.org/dev/peps/pep-0008/), the [Google Python style
 guide](http://google-styleguide.googlecode.com/svn/trunk/pyguide.html), and [numpy docstring
 conventions](https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt).
+
+  //This could also live in the intorduction document. Just a though. Wording can be improved. Is this all there would be? I noticed text started to thin out as I went down the documentation files. 
