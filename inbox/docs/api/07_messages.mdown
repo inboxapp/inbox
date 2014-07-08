@@ -81,6 +81,6 @@ PUT https://api.inboxapp.com/n/<namespace_id>/messages/<message_id>
 ```
 :::json
 {
-    "unread": false
+    "unread": true
 }
 ```
