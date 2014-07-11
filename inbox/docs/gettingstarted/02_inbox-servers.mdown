@@ -44,4 +44,4 @@ You can test that the server is working properly by hitting the `/n/` API which 
 $ curl http://localhost:5555/n/
 ```
 
-Now you can start writing your own application on top of the Inbox API! See either the [iOS SDK Docs](http://inboxapp.com/docs/ios) or the [JavaScript SDK Docs](https://www.inboxapp.com/docs/javascript) to get started. For more information about the internals of the Inbox API, see the [Inbox API Documentation](https://www.inboxapp.com/docs/api).
+Now you can start writing your own application on top of the Inbox API! See either the [iOS SDK Docs](https://www.inboxapp.com/docs/ios) or the [JavaScript SDK Docs](https://www.inboxapp.com/docs/javascript) to get started. For more information about the internals of the Inbox API, see the [Inbox API Documentation](https://www.inboxapp.com/docs/api).
