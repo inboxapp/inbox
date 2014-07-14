@@ -6,13 +6,10 @@ from datetime import datetime, timedelta
 from inbox.log import get_logger
 log = get_logger()
 
-PROVIDER = 'gmail'
-
-
-__volatile_tokens__ = {}
-
 
 class GmailAccount(ImapAccount):
+    PROVIDER = 'gmail'
+
     id = Column(Integer, ForeignKey(ImapAccount.id, ondelete='CASCADE'),
                 primary_key=True)
 
@@ -35,46 +32,20 @@ class GmailAccount(ImapAccount):
 
     @property
     def access_token(self):
+        ''' If token is expired or does not exist, then fetch new'''
         from inbox.oauth import new_token, validate_token
 
-        if self.id in __volatile_tokens__:
-            tok, expires = __volatile_tokens__[self.id]
-            if datetime.utcnow() > expires:
-                # Remove access token from pool,  return new one
-                del __volatile_tokens__[self.id]
-                return self.access_token
-            else:
-                return tok
-        else:
-            # first time getting access token, or perhaps it expired?
-            tok, expires = new_token(self.refresh_token)
+        if not hasattr(self, '_access_token') or not self._access_token or \
+                datetime.utcnow() > self._token_expiry:
+            new_tok, expires_in_seconds = new_token(self.refresh_token)
+            new_expiry = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
 
-            if validate_token(tok):
-                self.set_access_token(tok, expires)
-                return tok
-            else:
+            if not validate_token(new_tok):
                 return None
 
-    def renew_access_token(self):
-        del __volatile_tokens__[self.id]
-        return self.access_token
-
-    def set_access_token(self, tok, expires_in):
-        # Subtract 10 seconds as it takes _some_ time to propagate between
-        # google's servers and this code (much less than 10 seconds, but
-        # 10 should be safe)
-        expires = datetime.utcnow() + timedelta(seconds=expires_in - 10)
-        if datetime.utcnow() > expires:
-            log.error("Error setting expired access_token for {}"
-                      .format(self.id))
-            return
-
-        __volatile_tokens__[self.id] = tok, expires
+            self._access_token, self._token_expiry = new_tok, new_expiry
+        return self._access_token
 
     @property
     def sender_name(self):
         return self.name or ''
-
-    @property
-    def provider(self):
-        return PROVIDER

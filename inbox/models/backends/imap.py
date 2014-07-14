@@ -16,10 +16,10 @@ from inbox.models.thread import Thread
 from inbox.models.message import Message
 from inbox.models.folder import Folder
 
-PROVIDER = 'imap'
-
 
 class ImapAccount(Account):
+    PROVIDER = 'imap'
+
     id = Column(Integer, ForeignKey(Account.id, ondelete='CASCADE'),
                 primary_key=True)
 
@@ -28,7 +28,7 @@ class ImapAccount(Account):
 
     @property
     def provider(self):
-        return PROVIDER.lower()
+        return self.__class__.PROVIDER
 
 
 class ImapUid(MailSyncBase):

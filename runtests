@@ -34,7 +34,7 @@ def main():
 
      # Only general i.e. provider agnostic tests (Default)
     else:
-        testrunner += ['tests/general', 'tests/api']
+        testrunner += ['tests/general', 'tests/api', 'tests/backends']
 
     print 'Running tests in {0}'.format(', '.join(d for d in testrunner[1:]))
 
