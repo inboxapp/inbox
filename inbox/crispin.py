@@ -314,7 +314,8 @@ class CrispinClient(object):
         select_info = self.conn.select_folder(
             folder, readonly=self.readonly)
         select_info['UIDVALIDITY'] = long(select_info['UIDVALIDITY'])
-        select_info['UIDNEXT'] = long(select_info['UIDNEXT'])
+        if 'UIDNEXT' in select_info:
+            select_info['UIDNEXT'] = long(select_info['UIDNEXT'])
         self.selected_folder = (folder, select_info)
         # don't propagate cached information from previous session
         self._folder_names = None
