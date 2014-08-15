@@ -313,8 +313,17 @@ class CrispinClient(object):
         """
         select_info = self.conn.select_folder(
             folder, readonly=self.readonly)
+
         select_info['UIDVALIDITY'] = long(select_info['UIDVALIDITY'])
-        select_info['UIDNEXT'] = long(select_info['UIDNEXT'])
+        if 'UIDNEXT' in select_info:
+            select_info['UIDNEXT'] = long(select_info['UIDNEXT'])
+        else:
+            # Lookup UIDNEXT using either the uidnext function or folder_status
+            # Performance concern? Takes about ~0.04s per message on one server.
+            select_info['UIDNEXT'] = \
+                long(self.conn.folder_status(folder, ('UIDNEXT'))['UIDNEXT'])
+            
+
         self.selected_folder = (folder, select_info)
         # don't propagate cached information from previous session
         self._folder_names = None
