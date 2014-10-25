@@ -38,8 +38,7 @@ def main(email_address, reauth):
         auth_handler = handler_from_provider(provider)
         auth_info.update(auth_handler.interactive_auth(email_address))
 
-        account = auth_handler.create_account(db_session, email_address,
-                                              auth_info)
+        account = auth_handler.create_account(db_session, auth_info)
 
         try:
             if auth_handler.verify_account(account):
