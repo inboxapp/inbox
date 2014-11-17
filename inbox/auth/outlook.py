@@ -77,13 +77,31 @@ class OutlookAuthHandler(OAuthAuthHandler):
     def validate_token(self, access_token):
         return self._get_user_info(access_token)
 
-    def interactive_auth(self, email_address=None):
+    def get_authorization_url(self, email_address=None):
         url_args = {'redirect_uri': self.OAUTH_REDIRECT_URI,
                     'client_id': self.OAUTH_CLIENT_ID,
                     'response_type': 'code',
                     'scope': self.OAUTH_SCOPE,
                     'access_type': 'offline'}
+
         url = url_concat(self.OAUTH_AUTHENTICATE_URL, url_args)
+
+        return url
+
+    def init_auth(self, email_address=None):
+        authorization_url = self.get_authorization_url(email_address)
+
+        return {"provider_type": "oauth", "authorization_url": authorization_url}
+        
+    def auth(self, auth_code):
+        try:
+            auth_response = self._get_authenticated_user(auth_code)
+            return auth_response
+        except OAuthError:
+            return False
+
+    def interactive_auth(self, email_address=None):
+        url = self.get_authorization_url(email_address)
 
         print ('Please visit the following url to allow access to this '
                'application. The response will provide '
