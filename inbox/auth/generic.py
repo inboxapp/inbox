@@ -138,6 +138,20 @@ class GenericAuthHandler(AuthHandler):
         conn.logout()
         return True
 
+    def init_auth(self, email_address):
+        return {"provider_type": "custom"} if self.provider_name == 'custom' else {"provider_type": "generic"}
+
+    def auth(self, info):
+        response = dict(email=info['email_address'], password=info['password'])
+
+        if self.provider_name == 'custom':
+            response.update(imap_server_host=info['imap_server_host'],
+                            imap_server_port=info['imap_server_port'],
+                            smtp_server_host=info['smtp_server_host'],
+                            smtp_server_port=info['smtp_server_port'])
+
+        return response
+        
     def interactive_auth(self, email_address):
         password_message = 'Password for {0} (hidden): '
         pw = ''
