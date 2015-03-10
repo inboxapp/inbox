@@ -52,7 +52,7 @@ class SMTPConnection(object):
             return
 
     def setup(self):
-        host, port = self.smtp_endpoint
+        host, port, is_secure = self.smtp_endpoint
         if port == SMTP_OVER_SSL_PORT:
             self.connection = smtplib.SMTP_SSL()
             self.connection.connect(host, port)
@@ -61,10 +61,12 @@ class SMTPConnection(object):
             self.connection.connect(host, port)
             # Put the SMTP connection in TLS mode
             self.connection.ehlo()
-            if not self.connection.has_extn('starttls'):
+            has_starttls = self.connection.has_extn('starttls')
+            if is_secure and not has_starttls:
                 raise SendMailException('Required SMTP STARTTLS not '
                                         'supported.')
-            self.connection.starttls()
+            if has_starttls:
+                self.connection.starttls()
 
         # Auth the connection
         self.connection.ehlo()

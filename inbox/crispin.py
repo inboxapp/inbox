@@ -169,7 +169,7 @@ class CrispinConnectionPool(geventconnpool.ConnectionPool):
                     db_session.commit()
                     raise
             else:
-                self.credential = account.password
+                self.credential = (account.imap_username, account.password)
 
     def _new_connection(self):
         from inbox.auth.base import handler_from_provider

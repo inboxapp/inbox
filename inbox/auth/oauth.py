@@ -24,35 +24,14 @@ class OAuthAuthHandler(AuthHandler):
         IMAPClient.error
             If the credentials are invalid.
         """
-        host, port = imap_endpoint
-        try:
-            conn = IMAPClient(host, port=port, use_uid=True, ssl=True)
-        except IMAPClient.AbortError as e:
-            log.error('account_connect_failed',
-                      account_id=account_id,
-                      email=email,
-                      host=host,
-                      port=port,
-                      error="[ALERT] Can't connect to host - may be transient")
-            raise TransientConnectionError(str(e))
-        except(IMAPClient.Error, gaierror, socket_error) as e:
-            log.error('account_connect_failed',
-                      account_id=account_id,
-                      email=email,
-                      host=host,
-                      port=port,
-                      error='[ALERT] (Failure): {0}'.format(str(e)))
-            raise ConnectionError(str(e))
+        conn = self.connect_to_imap(imap_endpoint)
 
-        conn.debug = False
         try:
             conn.oauth2_login(email, pw)
         except IMAPClient.AbortError as e:
             log.error('account_verify_failed',
                       account_id=account_id,
                       email=email,
-                      host=host,
-                      port=port,
                       error="[ALERT] Can't connect to host - may be transient")
             raise TransientConnectionError(str(e))
         except IMAPClient.Error as e:
@@ -68,8 +47,6 @@ class OAuthAuthHandler(AuthHandler):
             log.error('account_verify_failed',
                       account_id=account_id,
                       email=email,
-                      host=host,
-                      port=port,
                       error='[ALERT] (Failure) SSL Connection error')
             raise ConnectionError(str(e))
 

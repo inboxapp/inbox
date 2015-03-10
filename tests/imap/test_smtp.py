@@ -10,7 +10,7 @@ def test_use_smtp_over_ssl():
                           email_address='inboxapptest@gmail.com',
                           auth_type='password',
                           auth_token='secret_password',
-                          smtp_endpoint=('smtp.gmail.com', 465),
+                          smtp_endpoint=('smtp.gmail.com', 465, True),
                           log=get_logger())
     assert isinstance(conn.connection, smtplib.SMTP_SSL)
 
@@ -20,6 +20,6 @@ def test_use_starttls():
                           email_address='inboxapptest@gmail.com',
                           auth_type='password',
                           auth_token='secret_password',
-                          smtp_endpoint=('smtp.gmail.com', 587),
+                          smtp_endpoint=('smtp.gmail.com', 587, True),
                           log=get_logger())
     assert isinstance(conn.connection, smtplib.SMTP)

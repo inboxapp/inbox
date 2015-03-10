@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (Column, Integer, BigInteger, Boolean, Enum,
-                        ForeignKey, Index, String, desc)
+                        ForeignKey, Index, String, desc, true)
 from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.sql.expression import false
@@ -28,31 +28,39 @@ class ImapAccount(Account):
 
     _imap_server_host = Column(String(255), nullable=True)
     _imap_server_port = Column(Integer, nullable=False, server_default='993')
+    _imap_server_is_secure = Column(Boolean, server_default=true(),
+                                    nullable=False)
 
     _smtp_server_host = Column(String(255), nullable=True)
     _smtp_server_port = Column(Integer, nullable=False, server_default='587')
+    _smtp_server_is_secure = Column(Boolean, server_default=true(),
+                                    nullable=False)
 
     @property
     def imap_endpoint(self):
         if self._imap_server_host is not None:
-            return (self._imap_server_host, self._imap_server_port)
+            return (self._imap_server_host, self._imap_server_port,
+                    self._imap_server_is_secure)
         else:
             return self.provider_info['imap']
 
     @imap_endpoint.setter
     def imap_endpoint(self, endpoint):
-        self._imap_server_host, self._imap_server_port = endpoint
+        self._imap_server_host, self._imap_server_port, \
+            self._imap_server_is_secure = endpoint
 
     @property
     def smtp_endpoint(self):
         if self._smtp_server_host is not None:
-            return (self._smtp_server_host, self._smtp_server_port)
+            return (self._smtp_server_host, self._smtp_server_port,
+                    self._smtp_server_is_secure)
         else:
             return self.provider_info['smtp']
 
     @smtp_endpoint.setter
     def smtp_endpoint(self, endpoint):
-        self._smtp_server_host, self._smtp_server_port = endpoint
+        self._smtp_server_host, self._smtp_server_port, \
+            self._smtp_server_is_secure = endpoint
 
 
 class ImapUid(MailSyncBase):

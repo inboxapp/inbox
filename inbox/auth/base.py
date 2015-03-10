@@ -1,6 +1,10 @@
 from abc import ABCMeta, abstractmethod
+from imapclient import IMAPClient
+from inbox.basicauth import ConnectionError, TransientConnectionError
 from inbox.providers import providers
 from inbox.basicauth import NotSupportedError
+from inbox.log import get_logger
+log = get_logger()
 
 
 def handler_from_provider(provider_name):
@@ -42,6 +46,33 @@ class AuthHandler(object):
 
     def __init__(self, provider_name):
         self.provider_name = provider_name
+
+    def connect_to_imap(self, imap_endpoint):
+        host, port, is_secure = imap_endpoint
+        try:
+            conn = IMAPClient(host, port=port, use_uid=True, ssl=(port == 993))
+            if is_secure and port != 993:
+                # Raises an exception if TLS can't be established
+                conn._imap.starttls()
+        except IMAPClient.AbortError as e:
+            log.error('account_connect_failed',
+                      account_id=account_id,
+                      email=email,
+                      host=host,
+                      port=port,
+                      error="[ALERT] Can't connect to host - may be transient")
+            raise TransientConnectionError(str(e))
+        except(IMAPClient.Error, gaierror, socket_error) as e:
+            log.error('account_connect_failed',
+                      account_id=account_id,
+                      email=email,
+                      host=host,
+                      port=port,
+                      error='[ALERT] (Failure): {0}'.format(str(e)))
+            raise ConnectionError(str(e))
+
+        conn.debug = False
+        return conn
 
     # optional
     def connect_account(self, email, secret, imap_endpoint):

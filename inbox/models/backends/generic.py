@@ -14,6 +14,10 @@ class GenericAccount(ImapAccount):
     provider = Column(String(64))
     supports_condstore = Column(Boolean)
 
+    # IMAP/SMTP login, if different from the email address.
+    imap_username = Column(String(255), nullable=True)
+    smtp_username = Column(String(255), nullable=True)
+
     # Secret
     password_id = Column(Integer, ForeignKey(Secret.id), nullable=False)
     secret = relationship('Secret', cascade='all', uselist=False)

@@ -43,9 +43,9 @@ class ImapGmailPlugin(DumpGmailMixin):
 
     def slurp_namespace(self, namespace, account, db):
         info = account.provider_info
-        host, port = account.imap_endpoint
+        host, port, is_secure = account.imap_endpoint
 
-        imap = IMAPClient(host, port=port, use_uid=True, ssl=True)
+        imap = IMAPClient(host, port=port, use_uid=True, ssl=is_secure)
         imap.debug = self.args.debug_imap
         if info['auth'] == 'oauth2':
             imap.oauth2_login(account.email_address, account.access_token)
