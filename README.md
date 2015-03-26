@@ -38,6 +38,10 @@ And _voilà_! Auth an account via the commandline to start syncing:
 
     bin/inbox-auth ben.bitdiddle1861@gmail.com
 
+Because authentication uses a sample client key/secret by default, it is recommended that you use the [Google Developer Console](https://console.developers.google.com) and the Windows Dev Center to create a new OAuth 2.0 Client ID.
+
+For Google, add the Gmail, Calendar, and Contacts APIs, and then generate a *Client ID for Native Application*. Then, replace the sample credentials in `/etc/inboxapp/secrets.yml` and run `bin/inbox-auth your@email.com`.
+
 
 
 ## Provider compatibility
