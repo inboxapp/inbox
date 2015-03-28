@@ -30,7 +30,7 @@ def upgrade():
     op.add_column('message',
                   sa.Column('state',
                             sa.Enum('draft', 'sending', 'sending failed',
-                                    'sent')))
+                                    'sent', name='message_state')))
     op.add_column('message',
                   sa.Column('is_reply', sa.Boolean()))
     op.add_column('message',

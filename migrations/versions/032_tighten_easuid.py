@@ -46,7 +46,8 @@ def downgrade():
     if 'easfoldersync' in Base.metadata.tables:
         op.alter_column('easfoldersync', 'state',
                         type_=sa.Enum('initial', 'initial uidinvalid',
-                                      'poll', 'poll uidinvalid', 'finish'),
+                                      'poll', 'poll uidinvalid', 'finish',
+                                      name='sync_state'),
                         existing_nullable=False)
 
     if 'easuid' in Base.metadata.tables:

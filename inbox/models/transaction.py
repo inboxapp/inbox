@@ -1,11 +1,10 @@
+from inbox.engine_types import BIGJSON_TYPE
 from sqlalchemy import Column, Integer, String, ForeignKey, Index, Enum
 from sqlalchemy.orm import relationship
 
 from inbox.models.base import MailSyncBase
 from inbox.models.mixins import HasPublicID, HasRevisions
 from inbox.models.namespace import Namespace
-from inbox.sqlalchemy_ext.util import BigJSON
-
 
 class Transaction(MailSyncBase, HasPublicID):
     """ Transactional log to enable client syncing. """
@@ -18,10 +17,10 @@ class Transaction(MailSyncBase, HasPublicID):
     object_type = Column(String(20), nullable=False, index=True)
     record_id = Column(Integer, nullable=False, index=True)
     object_public_id = Column(String(191), nullable=False, index=True)
-    command = Column(Enum('insert', 'update', 'delete'), nullable=False)
+    command = Column(Enum('insert', 'update', 'delete', name='transaction_cmd'), nullable=False)
     # The API representation of the object at the time the transaction is
     # generated.
-    snapshot = Column(BigJSON, nullable=True)
+    snapshot = Column(BIGJSON_TYPE, nullable=True)
 
 
 Index('namespace_id_deleted_at', Transaction.namespace_id,

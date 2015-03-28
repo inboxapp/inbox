@@ -31,7 +31,7 @@ def upgrade():
     op.create_unique_constraint('uuid', 'event', ['uid', 'source',
                                 'account_id', 'provider_name'])
     op.alter_column('event', 'uid',
-                    type_=sa.String(767, collation='ascii_general_ci'))
+                    type_=sa.String(767, **ASCII_TYPE_PARAMS))
 
 
 def downgrade():

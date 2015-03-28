@@ -282,7 +282,7 @@ class ImapFolderSyncStatus(MailSyncBase):
 
     # see state machine in mailsync/backends/imap/imap.py
     state = Column(Enum('initial', 'initial uidinvalid',
-                   'poll', 'poll uidinvalid', 'finish'),
+                   'poll', 'poll uidinvalid', 'finish', name='folderstatus_state'),
                    server_default='initial', nullable=False)
 
     # stats on messages downloaded etc.

@@ -19,7 +19,7 @@ def upgrade():
         'searchtoken',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('token', sa.String(length=255), nullable=True),
-        sa.Column('source', sa.Enum('name', 'email_address'), nullable=True),
+        sa.Column('source', sa.Enum('name', 'email_address'), nullable=True, name='token_source'),
         sa.Column('contact_id', sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(['contact_id'], ['contact.id'],
                                 ondelete='CASCADE'),

@@ -19,7 +19,7 @@ def upgrade():
     # Can just drop this, was't really used before
     op.drop_column('secret', 'acl_id')
 
-    op.alter_column('secret', 'type', type_=sa.Enum('password', 'token'),
+    op.alter_column('secret', 'type', type_=sa.Enum('password', 'token', name='secret_type'),
                     existing_server_default=None,
                     existing_nullable=False)
 

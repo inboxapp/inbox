@@ -1,3 +1,4 @@
+from inbox.config import get_db_info
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
@@ -9,6 +10,7 @@ from inbox.models.constants import MAX_FOLDER_NAME_LENGTH, MAX_INDEXABLE_LENGTH
 from inbox.log import get_logger
 log = get_logger()
 
+NAME_COLLATION = 'utf8mb4_bin' if get_db_info('')['engine'] == 'mysql' else ''
 
 class Folder(MailSyncBase):
     """ Folders and labels from the remote account backend (IMAP/Exchange). """
@@ -31,7 +33,7 @@ class Folder(MailSyncBase):
     # folders (see
     # https://msdn.microsoft.com/en-us/library/ee624913(v=exchg.80).aspx).
     name = Column(String(MAX_FOLDER_NAME_LENGTH,
-                         collation='utf8mb4_bin'), nullable=True)
+                         collation=NAME_COLLATION), nullable=True)
     canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=True)
 
     # We use an additional identifier for certain providers,

@@ -1,4 +1,5 @@
 import json
+from inbox.config import get_db_info
 import os
 import subprocess
 from datetime import datetime, timedelta
@@ -156,14 +157,14 @@ class TestDB(object):
 
     def populate(self):
         """ Populates database with data from the test dumpfile. """
-        database = self.config.get('MYSQL_DATABASE')
-        user = self.config.get('MYSQL_USER')
-        password = self.config.get('MYSQL_PASSWORD')
-        hostname = self.config.get('MYSQL_HOSTNAME')
-        port = self.config.get('MYSQL_PORT')
+        info = get_db_info('test')
+        info['dump'] = self.dumpfile
 
-        cmd = 'mysql {0} -h{1} -P{2} -u{3} -p{4} < {5}'. \
-            format(database, hostname, port, user, password, self.dumpfile)
+        if info['engine'] == 'mysql':
+            cmd = ("mysql {name} -h{host} -P{post}"
+                   "-u{user} -p{password} < {dump}").format(**info)
+        elif info['engine'] == 'postgres':
+            cmd = 'pgsql {name} -h{host} -U{user} < {dump}'.format(**info)
         subprocess.check_call(cmd, shell=True)
 
     def teardown(self):

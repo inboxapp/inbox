@@ -7,6 +7,8 @@ Create Date: 2015-03-11 22:51:22.180028
 """
 
 # revision identifiers, used by Alembic.
+from inbox.engine_types import ASCII_TYPE_PARAMS
+
 revision = '1de526a15c5d'
 down_revision = '2493281d621'
 
@@ -24,7 +26,7 @@ def upgrade():
         # These have to be nullable so we can do the type conversion
         sa.Column('master_event_id', sa.Integer(), nullable=True),
         sa.Column('master_event_uid', sa.String(
-            length=767, collation='ascii_general_ci'), nullable=True),
+            length=767, **ASCII_TYPE_PARAMS), nullable=True),
         sa.Column('original_start_time', sa.DateTime(), nullable=True),
         sa.Column('cancelled', sa.Boolean(), default=False),
         sa.ForeignKeyConstraint(['id'], ['event.id'], ondelete='CASCADE'),

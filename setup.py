@@ -43,7 +43,9 @@ setup(
         "six>=1.8",
         "vobject>=0.8.1c",
         "lxml>=3.4.2",
-        "arrow==0.5.4"
+        "arrow==0.5.4",
+        "psycopg2==2.6",
+        "faulthandler==2.4"
     ],
     dependency_links=[],
 

@@ -1,9 +1,15 @@
+from inbox.config import get_db_info
 from sqlalchemy import Column, Integer, Text, ForeignKey, Enum, Index
 from sqlalchemy.orm import relationship
 
 from inbox.sqlalchemy_ext.util import JSON
 from inbox.models.base import MailSyncBase
 from inbox.models.namespace import Namespace
+
+if get_db_info()['engine'] == 'mysql':
+    TEXT_TYPE = Text(40)
+else:
+    TEXT_TYPE = Text
 
 ADD_TAG_ACTIONS = {
     'inbox': 'unarchive',
@@ -68,10 +74,10 @@ class ActionLog(MailSyncBase):
                           index=True)
     namespace = relationship('Namespace')
 
-    action = Column(Text(40), nullable=False)
+    action = Column(TEXT_TYPE, nullable=False)
     record_id = Column(Integer, nullable=False)
-    table_name = Column(Text(40), nullable=False)
-    status = Column(Enum('pending', 'successful', 'failed'),
+    table_name = Column(TEXT_TYPE, nullable=False)
+    status = Column(Enum('pending', 'successful', 'failed', name='action_status'),
                     server_default='pending')
     retries = Column(Integer, server_default='0', nullable=False)
 

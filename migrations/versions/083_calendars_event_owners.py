@@ -7,6 +7,8 @@ Create Date: 2014-08-18 21:50:52.175039
 """
 
 # revision identifiers, used by Alembic.
+from inbox.engine_types import ASCII_TYPE_PARAMS
+
 revision = '10a1129fe685'
 down_revision = '1322d3787305'
 
@@ -30,7 +32,7 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.Column('deleted_at', sa.DateTime(), nullable=True),
         sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('uid', sa.String(767, collation='ascii_general_ci'),
+        sa.Column('uid', sa.String(767, **ASCII_TYPE_PARAMS),
                   nullable=False),
         sa.Column('read_only', sa.Boolean(), nullable=False,
                   default=False),

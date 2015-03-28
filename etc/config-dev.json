@@ -1,7 +1,16 @@
 {
+"//": "deprecated, use DB_ variables instead",
 "MYSQL_DATABASE": "inbox",
 "MYSQL_HOSTNAME": "localhost",
 "MYSQL_PORT": 3306,
+
+"DB_NAME": "inbox",
+"DB_HOST": "localhost",
+"DB_USER": "",
+"DB_PASSWORD": "",
+"DB_PORT": 3306,
+"DB_ENGINE": "mysql",
+"DB_CONNECTION_PARAMS": {},
 
 "SYNC_STEAL_ACCOUNTS": true,
 

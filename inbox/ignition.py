@@ -16,7 +16,9 @@ def main_engine(pool_size=DB_POOL_SIZE, max_overflow=DB_POOL_MAX_OVERFLOW):
                            pool_size=pool_size,
                            pool_recycle=3600,
                            max_overflow=max_overflow,
-                           connect_args={'charset': 'utf8mb4'})
+                           connect_args=config.get("DB_CONNECTION_PARAMS", {
+                           'charset': 'utf8mb4'}))
+
     return engine
 
 

@@ -6,7 +6,7 @@ import sqlalchemy
 from alembic.config import Config as alembic_config
 from alembic import command as alembic_command
 
-from inbox.config import engine_uri, config
+from inbox.config import engine_uri, get_db_info
 
 from inbox.ignition import init_db
 from inbox.ignition import main_engine
@@ -18,31 +18,48 @@ basic_engine = sqlalchemy.create_engine(
     engine_uri(), listeners=[ForceStrictMode()], echo=False)
 
 
+
+def create_mysql(**kwargs):
+    print 'Creating database: {name} ({engine})'.format(**kwargs)
+    basic_engine.execute("CREATE DATABASE IF NOT EXISTS {name} DEFAULT CHARACTER "
+                         "SET utf8mb4 DEFAULT COLLATE utf8mb4_general_ci;".
+                         format(**kwargs))
+    basic_engine.execute("GRANT ALL PRIVILEGES ON {name}.* TO "
+                         "{user}@localhost IDENTIFIED BY '{user}'".
+                         format(**kwargs))
+
+def create_postgres(**kwargs):
+    print 'Creating database: {name} ({engine})'.format(**kwargs)
+
+    conn = basic_engine.connect()
+    conn.connection.set_isolation_level(0)
+    conn.execute("DROP DATABASE IF EXISTS {name}".format(**kwargs))
+    conn.execute("CREATE DATABASE {name}".format(**kwargs))
+    conn.connection.set_isolation_level(1)
+    conn.execute("GRANT ALL ON DATABASE {name} TO {user}".format(**kwargs))
+
+
 @click.command()
 @click.option('--prod/--no-prod', default=False,
               help='Disable creating the test database for production '
                    'deployments')
 def main(prod):
-
     if not prod:
+        '''
         print 'Creating database: test'
         basic_engine.execute(
             "CREATE DATABASE IF NOT EXISTS test DEFAULT CHARACTER SET utf8mb4 "
             "DEFAULT COLLATE utf8mb4_general_ci")
         basic_engine.execute("GRANT ALL PRIVILEGES ON test.* TO "
                              "inboxtest@localhost IDENTIFIED BY 'inboxtest'")
-
-    mysql_user = config.get_required('MYSQL_USER')
-    mysql_database = config.get_required('MYSQL_DATABASE')
-
-    print 'Creating database: {}'.format(mysql_database)
-    basic_engine.execute("CREATE DATABASE IF NOT EXISTS {} DEFAULT CHARACTER "
-                         "SET utf8mb4 DEFAULT COLLATE utf8mb4_general_ci;".
-                         format(mysql_database))
-    basic_engine.execute("GRANT ALL PRIVILEGES ON {mysql_database}.* TO "
-                         "{mysql_user}@localhost IDENTIFIED BY '{mysql_user}'".
-                         format(mysql_user=mysql_user,
-                                mysql_database=mysql_database))
+        '''
+    db_info = get_db_info('test')
+    if db_info['engine'] == 'mysql':
+        create_mysql(**db_info)
+    elif db_info['engine'] == 'postgres':
+        create_postgres(**db_info)
+    else:
+        raise Exception("Unknown database engine")
 
     init_db(inbox_db_engine)
 
