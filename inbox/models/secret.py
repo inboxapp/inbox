@@ -1,5 +1,5 @@
+from inbox.engine_types import BLOB_TYPE
 from sqlalchemy import Column, Enum, Integer
-from sqlalchemy.types import BLOB
 from sqlalchemy.orm import validates
 
 from inbox.models.base import MailSyncBase
@@ -8,10 +8,10 @@ from inbox.security.oracles import get_encryption_oracle, get_decryption_oracle
 
 class Secret(MailSyncBase):
     """Simple local secrets table."""
-    _secret = Column(BLOB, nullable=False)
+    _secret = Column(BLOB_TYPE, nullable=False)
 
     # Type of secret
-    type = Column(Enum('password', 'token'), nullable=False)
+    type = Column(Enum('password', 'token', name='secret_type'), nullable=False)
 
     # Scheme used
     encryption_scheme = Column(Integer, server_default='0', nullable=False)

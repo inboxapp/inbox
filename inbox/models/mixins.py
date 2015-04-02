@@ -1,9 +1,10 @@
 import abc
 from datetime import datetime
+from inbox.engine_types import BASE36_TYPE
 from sqlalchemy import Column, DateTime, String, inspect
 from sqlalchemy.ext.hybrid import hybrid_property, Comparator
 
-from inbox.sqlalchemy_ext.util import Base36UID, generate_public_id, ABCMixin
+from inbox.sqlalchemy_ext.util import generate_public_id, ABCMixin
 from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from inbox.util.addr import canonicalize_address
 
@@ -47,7 +48,7 @@ class HasRevisions(ABCMixin):
 
 
 class HasPublicID(object):
-    public_id = Column(Base36UID, nullable=False,
+    public_id = Column(BASE36_TYPE, nullable=False,
                        index=True, default=generate_public_id)
 
 

@@ -15,7 +15,7 @@ from sqlalchemy.sql.expression import false
 from inbox.util.html import plaintext2html, strip_tags
 from inbox.sqlalchemy_ext.util import JSON, json_field_too_long
 
-from inbox.config import config
+from inbox.config import config, get_db_info
 from inbox.util.addr import parse_mimepart_address_header
 from inbox.util.file import mkdirp
 from inbox.util.misc import parse_references, get_internaldate
@@ -27,6 +27,11 @@ from inbox.models.namespace import Namespace
 
 from inbox.log import get_logger
 log = get_logger()
+
+if get_db_info()['engine'] == 'mysql':
+    BODY_TEXT_TYPE = Text(length=26214400)
+else:
+    BODY_TEXT_TYPE = Text
 
 
 def _trim_filename(s, mid, max_len=64):
@@ -100,7 +105,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
     is_sent = Column(Boolean, server_default=false(), nullable=False)
 
     # DEPRECATED
-    state = Column(Enum('draft', 'sending', 'sending failed', 'sent'))
+    state = Column(Enum('draft', 'sending', 'sending failed', 'sent', name='message_state'))
 
     # Most messages are short and include a lot of quoted text. Preprocessing
     # just the relevant part out makes a big difference in how much data we
@@ -109,7 +114,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
     # attachments on Gmail), assuming a maximum # of chars determined by
     # 1-byte (ASCII) chars.
     # NOTE: always HTML :)
-    sanitized_body = Column(Text(length=26214400), nullable=False)
+    sanitized_body = Column(BODY_TEXT_TYPE, nullable=False)
     snippet = Column(String(191), nullable=False)
     SNIPPET_LENGTH = 191
 

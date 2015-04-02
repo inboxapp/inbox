@@ -26,7 +26,7 @@ class Namespace(MailSyncBase, HasPublicID):
                            uselist=False)
 
     # invariant: imapaccount is non-null iff type is root
-    type = Column(Enum('root', 'shared_folder'), nullable=False,
+    type = Column(Enum('root', 'shared_folder', name='namespace_type'), nullable=False,
                   server_default='root')
 
     @property

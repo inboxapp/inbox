@@ -38,7 +38,7 @@ class Block(Blob, MailSyncBase, HasRevisions, HasPublicID):
     from inbox.models.namespace import Namespace
 
     # Save some space with common content types
-    _content_type_common = Column(Enum(*COMMON_CONTENT_TYPES))
+    _content_type_common = Column(Enum(*COMMON_CONTENT_TYPES, name='block_types'), name='block_types')
     _content_type_other = Column(String(255))
     filename = Column(String(255))
 
@@ -95,7 +95,7 @@ class Part(MailSyncBase):
 
     walk_index = Column(Integer)
     # https://www.ietf.org/rfc/rfc2183.txt
-    content_disposition = Column(Enum('inline', 'attachment'), nullable=True)
+    content_disposition = Column(Enum('inline', 'attachment', name='part_content'), nullable=True)
     content_id = Column(String(255))  # For attachments
 
     is_inboxapp_attachment = Column(Boolean, server_default=false())

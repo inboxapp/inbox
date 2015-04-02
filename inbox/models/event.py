@@ -1,5 +1,6 @@
 import arrow
 from datetime import datetime
+
 time_parse = datetime.utcfromtimestamp
 from dateutil.parser import parse as date_parse
 import ast
@@ -18,8 +19,10 @@ from inbox.models.namespace import Namespace
 from inbox.models.message import Message
 from inbox.models.when import Time, TimeSpan, Date, DateSpan
 from inbox.events.util import parse_rrule_datetime
-
+from inbox.engine_types import ASCII_TYPE_PARAMS, BIGJSON_TYPE
 from inbox.log import get_logger
+
+
 log = get_logger()
 
 TITLE_MAX_LEN = 1024
@@ -88,12 +91,12 @@ class Event(MailSyncBase, HasRevisions, HasPublicID):
                             load_on_pending=True)
 
     # A server-provided unique ID.
-    uid = Column(String(767, collation='ascii_general_ci'), nullable=False)
+    uid = Column(String(767, **ASCII_TYPE_PARAMS), nullable=False)
 
     # DEPRECATED
     # TODO(emfree): remove
     provider_name = Column(String(64), nullable=False, default='DEPRECATED')
-    source = Column('source', Enum('local', 'remote'), default='local')
+    source = Column('source', Enum('local', 'remote', name='event_source'), default='local')
 
     raw_data = Column(Text, nullable=False)
 
@@ -124,7 +127,7 @@ class Event(MailSyncBase, HasRevisions, HasPublicID):
     __table_args__ = (Index('ix_event_ns_uid_calendar_id',
                             'namespace_id', 'uid', 'calendar_id'),)
 
-    participants = Column(MutableList.as_mutable(BigJSON), default=[],
+    participants = Column(MutableList.as_mutable(BIGJSON_TYPE), default=[],
                           nullable=True)
 
     discriminator = Column('type', String(30))
@@ -315,7 +318,7 @@ class RecurringEventOverride(Event, HasRevisions):
     __table_args__ = None
 
     master_event_id = Column(ForeignKey('event.id'))
-    master_event_uid = Column(String(767, collation='ascii_general_ci'),
+    master_event_uid = Column(String(767, **ASCII_TYPE_PARAMS),
                               index=True)
     original_start_time = Column(FlexibleDateTime)
     # We have to store individual cancellations as overrides, as the EXDATE

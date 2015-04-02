@@ -105,35 +105,43 @@ config = Configuration()
 _update_config_from_env(config)
 _get_local_feature_flags(config)
 
-if 'MYSQL_PASSWORD' not in config:
+if not ('MYSQL_PASSWORD' in config or 'DB_PASSWORD' in config):
     raise Exception(
         'Missing secrets config file? Run `sudo cp etc/secrets-dev.yml '
         '/etc/inboxapp/secrets.yml` and retry')
+
+def get_db_info(database=None):
+    info = {
+        'user': config.get('DB_USER') or config.get('MYSQL_USER'),
+        'password': config.get('DB_PASSWORD') or config.get('MYSQL_PASSWORD'),
+        'host': config.get('DB_HOST') or config.get('MYSQL_HOSTNAME'),
+        'port': str(config.get('DB_PORT') or config.get('MYSQL_PORT')),
+        'name': database or '',
+        'engine': config.get('DB_ENGINE') or 'mysql',
+
+    }
+
+    # So we can use docker links to dynamically attach containerized databases
+    # https://docs.docker.com/userguide/dockerlinks/#environment-variables
+    if info['engine'] == 'mysql':
+        info['host'] = os.getenv("MYSQL_PORT_3306_TCP_ADDR", info['host'])
+        info['port'] = os.getenv("MYSQL_PORT_3306_TCP_PORT", info['port'])
+    return info
 
 
 def engine_uri(database=None):
     """ By default doesn't include the specific database. """
 
-    info = {
-        'username': config.get_required('MYSQL_USER'),
-        'password': config.get_required('MYSQL_PASSWORD'),
-        'host': config.get_required('MYSQL_HOSTNAME'),
-        'port': str(config.get_required('MYSQL_PORT')),
-        'database': database if database else '',
-    }
-
-    # So we can use docker links to dynamically attach containerized databases
-    # https://docs.docker.com/userguide/dockerlinks/#environment-variables
-
-    info['host'] = os.getenv("MYSQL_PORT_3306_TCP_ADDR", info['host'])
-    info['port'] = os.getenv("MYSQL_PORT_3306_TCP_PORT", info['port'])
-
-    uri_template = 'mysql+pymysql://{username}:{password}@{host}' \
-                   ':{port}/{database}?charset=utf8mb4'
+    info = get_db_info(database)
+    if info['engine'] == 'mysql':
+        uri_template = 'mysql+pymysql://{username}:{password}@{host}' \
+                       ':{port}/{database}?charset=utf8mb4'
+    elif info['engine'] == 'postgres':
+        uri_template = 'postgresql://{user}:{password}@{host}:{port}/{name}'
 
     return uri_template.format(**{k: urlquote(v) for k, v in info.items()})
 
 
 def db_uri():
-    database = config.get_required('MYSQL_DATABASE')
+    database = config.get('MYSQL_DATABASE') or config.get("DB_NAME")
     return engine_uri(database)

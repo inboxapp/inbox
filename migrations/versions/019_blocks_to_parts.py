@@ -33,7 +33,7 @@ def upgrade():
                     sa.Column('message_id', sa.Integer(), nullable=True),
                     sa.Column('walk_index', sa.Integer(), nullable=True),
                     sa.Column('content_disposition', sa.Enum(
-                        'inline', 'attachment'), nullable=True),
+                        'inline', 'attachment', name='part_content'), nullable=True),
                     sa.Column(
                         'content_id', sa.String(length=255), nullable=True),
                     sa.Column('misc_keyval', JSON(), nullable=True),

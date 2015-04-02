@@ -6,6 +6,8 @@ import time
 from bson import json_util, EPOCH_NAIVE
 # Monkeypatch to not include tz_info in decoded JSON.
 # Kind of a ridiculous solution, but works.
+from inbox.config import get_db_info
+
 json_util.EPOCH_AWARE = EPOCH_NAIVE
 
 from sqlalchemy import String, Text, event
@@ -247,10 +249,10 @@ def generate_public_id():
 # not running with sql-mode=traditional.
 class ForceStrictMode(PoolListener):
     def connect(self, dbapi_con, connection_record):
-        cur = dbapi_con.cursor()
-        cur.execute("SET SESSION sql_mode='TRADITIONAL'")
-        cur = None
-
+        if get_db_info()['engine'] == 'mysql':
+            cur = dbapi_con.cursor()
+            cur.execute("SET SESSION sql_mode='TRADITIONAL'")
+            cur = None
 
 def maybe_refine_query(query, subquery):
     if subquery is None:

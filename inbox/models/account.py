@@ -154,14 +154,14 @@ class Account(MailSyncBase, HasPublicID, HasEmailAddress):
     sync_host = Column(String(255), nullable=True)
 
     # current state of this account
-    state = Column(Enum('live', 'down', 'invalid'), nullable=True)
+    state = Column(Enum('live', 'down', 'invalid', name='account_state'), nullable=True)
 
     @property
     def sync_enabled(self):
         return self.sync_should_run
 
     sync_state = Column(Enum('running', 'stopped', 'killed',
-                             'invalid', 'connerror'),
+                             'invalid', 'connerror', name='sync_state'),
                         nullable=True)
 
     # Based on account status, should the sync be running?

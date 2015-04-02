@@ -6,6 +6,7 @@ from inbox.models.base import MailSyncBase
 from inbox.models.namespace import Namespace
 
 from inbox.models.mixins import HasPublicID
+from inbox.engine_types import ASCII_TYPE_PARAMS
 
 
 class Calendar(MailSyncBase, HasPublicID):
@@ -19,7 +20,7 @@ class Calendar(MailSyncBase, HasPublicID):
     description = Column(Text, nullable=True)
 
     # A server-provided unique ID.
-    uid = Column(String(767, collation='ascii_general_ci'), nullable=False)
+    uid = Column(String(767, **ASCII_TYPE_PARAMS), nullable=False)
 
     read_only = Column(Boolean, nullable=False, default=False)
 
