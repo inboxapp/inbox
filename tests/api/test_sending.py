@@ -406,22 +406,24 @@ def test_draft_not_persisted_if_sending_fails(recipients_refused, api_client,
 def test_setting_reply_to_headers(patch_smtp, api_client):
     api_client.post_data('/send',
                          {'to': [{'email': 'bob@foocorp.com'}],
-                          'reply_to': {'name':'admin', 'email':'prez@whitehouse.gov'},
+                          'reply_to': [{'name':'admin', 'email':'prez@whitehouse.gov'}, {'name':'Foo Bar', 'email':'jane@foocorp.com'}],
                           'subject': 'Banalities',
                           'body': '<html>Hello there</html>'})
     _, msg = patch_smtp[-1]
     parsed = mime.from_string(msg)
     assert 'Reply-To' in parsed.headers
-    assert parsed.headers['Reply-To'] == 'admin <prez@whitehouse.gov>'
+    assert parsed.headers['Reply-To'] == 'admin <prez@whitehouse.gov>, Foo Bar <jane@foocorp.com>'
     
 
 def test_sending_from_email_alias(patch_smtp, api_client):
     api_client.post_data('/send',
                          {'to': [{'email': 'bob@foocorp.com'}],
-                          'from': {'name':'Foo Bar', 'email':'jane@foocorp.com'},
+                          'from': [{'name':'admin', 'email':'prez@whitehouse.gov'}, {'name':'Foo Bar', 'email':'jane@foocorp.com'}],
                           'subject': 'Banalities',
                           'body': '<html>Hello there</html>'})
     _, msg = patch_smtp[-1]
     parsed = mime.from_string(msg)
     assert 'From' in parsed.headers
-    assert parsed.headers['From'] == 'Foo Bar <jane@foocorp.com>'
+    assert parsed.headers['From'] == 'admin <prez@whitehouse.gov>, Foo Bar <jane@foocorp.com>'
+    assert 'Sender' in parsed.headers
+    assert parsed.headers['Sender'] == 'Inbox App <inboxapptest@gmail.com>'

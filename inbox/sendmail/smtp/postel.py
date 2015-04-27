@@ -254,7 +254,6 @@ class SMTPClient(object):
         """
         blocks = [p.block for p in draft.attachments]
         attachments = generate_attachments(blocks)
-        sender_name, sender_email = draft.from_addr[0]
 
         # @emfree - 3/19/2015
         #
@@ -272,9 +271,10 @@ class SMTPClient(object):
         #
         # Note that we ensure in our SMTP code BCCed recipients still actually
         # get the message.
-        msg = create_email(sender_name=sender_name,
-                           sender_email=sender_email,
+        msg = create_email(sender_name=self.sender_name,
+                           sender_email=self.email_address,
                            inbox_uid=draft.inbox_uid,
+                           from_addr=draft.from_addr,
                            to_addr=draft.to_addr,
                            cc_addr=draft.cc_addr,
                            bcc_addr=None,
@@ -290,7 +290,7 @@ class SMTPClient(object):
         self._send(recipient_emails, msg)
 
         # Sent to all successfully
-        self.log.info('Sending successful', sender=sender_email,
+        self.log.info('Sending successful', sender=self.email_address,
                       recipients=recipient_emails)
 
     def _get_connection(self):

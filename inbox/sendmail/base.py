@@ -1,8 +1,7 @@
 from collections import namedtuple
 from datetime import datetime
 from inbox.api.validation import (
-    get_recipients, get_tags, get_attachments, get_thread, get_message,
-    get_mailbox)
+    get_recipients, get_tags, get_attachments, get_thread, get_message)
 from inbox.api.err import InputError
 from inbox.contacts.process_mail import update_contacts_from_message
 from inbox.models import Message, Part
@@ -55,10 +54,10 @@ def create_draft(data, namespace, db_session, syncback):
     to_addr = get_recipients(data.get('to'), 'to')
     cc_addr = get_recipients(data.get('cc'), 'cc')
     bcc_addr = get_recipients(data.get('bcc'), 'bcc')
-    from_addr = get_mailbox(data.get('from'), 'from')
-    reply_to = get_mailbox(data.get('reply_to'), 'reply_to')
+    from_addr = get_recipients(data.get('from'), 'from')
+    reply_to = get_recipients(data.get('reply_to'), 'reply_to')
     if from_addr:
-        from_addr = From(*from_addr)
+        from_addr = [From(*addr) for addr in from_addr]
     subject = data.get('subject')
     if subject is not None and not isinstance(subject, basestring):
         raise InputError('"subject" should be a string')
@@ -100,8 +99,8 @@ def create_draft(data, namespace, db_session, syncback):
         message.namespace = namespace
         message.is_created = True
         message.is_draft = True
-        message.from_addr = [(account.name, account.email_address) if not from_addr
-                              else (from_addr.name, from_addr.email_address)]
+        message.from_addr = [(account.name, account.email_address)] if not \
+                            from_addr else from_addr
         # TODO(emfree): we should maybe make received_date nullable, so its
         # value doesn't change in the case of a drafted-and-later-reconciled
         # message.
