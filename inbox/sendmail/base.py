@@ -1,3 +1,4 @@
+from collections import namedtuple
 from datetime import datetime
 from inbox.api.validation import (
     get_recipients, get_tags, get_attachments, get_thread, get_message)
@@ -49,9 +50,14 @@ def create_draft(data, namespace, db_session, syncback):
 
     # Validate the input and get referenced objects (tags, thread, attachments)
     # as necessary.
+    From = namedtuple('From', 'name email_address')
     to_addr = get_recipients(data.get('to'), 'to')
     cc_addr = get_recipients(data.get('cc'), 'cc')
     bcc_addr = get_recipients(data.get('bcc'), 'bcc')
+    from_addr = get_recipients(data.get('from'), 'from')
+    reply_to = get_recipients(data.get('reply_to'), 'reply_to')
+    if from_addr:
+        from_addr = From(*from_addr[0])
     subject = data.get('subject')
     if subject is not None and not isinstance(subject, basestring):
         raise InputError('"subject" should be a string')
@@ -93,7 +99,7 @@ def create_draft(data, namespace, db_session, syncback):
         message.namespace = namespace
         message.is_created = True
         message.is_draft = True
-        message.from_addr = [(account.name, account.email_address)]
+        message.from_addr = [(account.name, account.email_address) if not from_addr else (from_addr.name, from_addr.email_address)]
         # TODO(emfree): we should maybe make received_date nullable, so its
         # value doesn't change in the case of a drafted-and-later-reconciled
         # message.
@@ -103,6 +109,7 @@ def create_draft(data, namespace, db_session, syncback):
         message.to_addr = to_addr
         message.cc_addr = cc_addr
         message.bcc_addr = bcc_addr
+        message.reply_to = reply_to
         # TODO(emfree): this is different from the normal 'size' value of a
         # message, which is the size of the entire MIME message.
         message.size = len(body)
@@ -174,7 +181,7 @@ def create_draft(data, namespace, db_session, syncback):
 
 def update_draft(db_session, account, draft, to_addr=None,
                  subject=None, body=None, blocks=None, cc_addr=None,
-                 bcc_addr=None, tags=None):
+                 bcc_addr=None, reply_to=None, tags=None):
     """
     Update draft with new attributes.
     """
@@ -192,6 +199,7 @@ def update_draft(db_session, account, draft, to_addr=None,
     update('to_addr', to_addr)
     update('cc_addr', cc_addr)
     update('bcc_addr', bcc_addr)
+    update('reply_to', reply_to)
     update('subject', subject if subject else None)
     update('sanitized_body', body if body else None)
     update('received_date', datetime.utcnow())

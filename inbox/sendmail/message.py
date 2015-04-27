@@ -55,6 +55,7 @@ def create_email(sender_name,
                  to_addr,
                  cc_addr,
                  bcc_addr,
+                 reply_to,
                  subject,
                  html,
                  in_reply_to,
@@ -71,6 +72,9 @@ def create_email(sender_name,
         The sender's email address.
     to_addr, cc_addr, bcc_addr: list of pairs (name, email_address), or None
         Message recipients.
+    reply_to: list or None
+        Indicates the mailbox(es) to which the author of the message suggests
+        that replies be sent.
     subject : string
         a utf-8 encoded string
     html : string
@@ -134,7 +138,11 @@ def create_email(sender_name,
         full_bcc_specs = [address.EmailAddress(name, spec).full_spec()
                           for name, spec in bcc_addr]
         msg.headers['Bcc'] = u', '.join(full_bcc_specs)
-
+    if reply_to:
+        full_reply_to_specs = [address.EmailAddress(name, spec).full_spec()
+                          for name, spec in reply_to]
+        msg.headers['Reply-To'] = u', '.join(full_reply_to_specs)
+              
     add_inbox_headers(msg, inbox_uid)
 
     if in_reply_to:

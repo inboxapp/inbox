@@ -254,7 +254,7 @@ class SMTPClient(object):
         """
         blocks = [p.block for p in draft.attachments]
         attachments = generate_attachments(blocks)
-
+        sender_name, sender_email = draft.from_addr[0] 
         # @emfree - 3/19/2015
         #
         # Note that we intentionally don't set the Bcc header in the message we
@@ -271,12 +271,13 @@ class SMTPClient(object):
         #
         # Note that we ensure in our SMTP code BCCed recipients still actually
         # get the message.
-        msg = create_email(sender_name=self.sender_name,
-                           sender_email=self.email_address,
+        msg = create_email(sender_name=sender_name,
+                           sender_email=sender_email,
                            inbox_uid=draft.inbox_uid,
                            to_addr=draft.to_addr,
                            cc_addr=draft.cc_addr,
                            bcc_addr=None,
+                           reply_to=draft.reply_to,
                            subject=draft.subject,
                            html=draft.sanitized_body,
                            in_reply_to=draft.in_reply_to,
@@ -288,7 +289,7 @@ class SMTPClient(object):
         self._send(recipient_emails, msg)
 
         # Sent to all successfully
-        self.log.info('Sending successful', sender=self.email_address,
+        self.log.info('Sending successful', sender=sender_email,
                       recipients=recipient_emails)
 
     def _get_connection(self):
