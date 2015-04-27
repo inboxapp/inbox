@@ -254,7 +254,8 @@ class SMTPClient(object):
         """
         blocks = [p.block for p in draft.attachments]
         attachments = generate_attachments(blocks)
-        sender_name, sender_email = draft.from_addr[0] 
+        sender_name, sender_email = draft.from_addr[0]
+
         # @emfree - 3/19/2015
         #
         # Note that we intentionally don't set the Bcc header in the message we
