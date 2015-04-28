@@ -1,4 +1,3 @@
-from collections import namedtuple
 from datetime import datetime
 from inbox.api.validation import (
     get_recipients, get_tags, get_attachments, get_thread, get_message,
