@@ -270,8 +270,11 @@ class SMTPClient(object):
         #
         # Note that we ensure in our SMTP code BCCed recipients still actually
         # get the message.
-        msg = create_email(from_name=draft.from_addr[0][0],
-                           from_email=draft.from_addr[0][1],
+
+        # from_addr is only ever a list with one element
+        from_addr = draft.from_addr[0]
+        msg = create_email(from_name=from_addr[0],
+                           from_email=from_addr[1],
                            reply_to=draft.reply_to,
                            inbox_uid=draft.inbox_uid,
                            to_addr=draft.to_addr,
@@ -288,7 +291,7 @@ class SMTPClient(object):
         self._send(recipient_emails, msg)
 
         # Sent to all successfully
-        self.log.info('Sending successful', sender=draft.from_addr[0][1],
+        self.log.info('Sending successful', sender=from_addr[1],
                       recipients=recipient_emails)
 
     def _get_connection(self):

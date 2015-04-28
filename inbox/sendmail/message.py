@@ -139,6 +139,7 @@ def create_email(from_name,
                           for name, spec in bcc_addr]
         msg.headers['Bcc'] = u', '.join(full_bcc_specs)
     if reply_to:
+        # reply_to is only ever a list with one element
         reply_to_spec = address.EmailAddress(reply_to[0][0], reply_to[0][1])
         msg.headers['Reply-To'] = reply_to_spec.full_spec()
               

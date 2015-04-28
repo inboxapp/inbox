@@ -187,19 +187,19 @@ def get_recipients(recipients, field):
     if not isinstance(recipients, list):
         raise InputError('Invalid {} field'.format(field))
 
-    return [get_mailbox(r, field) for r in recipients]
+    return [get_recipient(r, field) for r in recipients]
 
 
-def get_mailbox(mailbox, field):
-    if mailbox is None:
+def get_recipient(recipient, field):
+    if recipient is None:
         return None
-    if not (isinstance(mailbox, dict) and 'email' in mailbox and
-            isinstance(mailbox['email'], basestring)):
+    if not (isinstance(recipient, dict) and 'email' in recipient and
+            isinstance(recipient['email'], basestring)):
         raise InputError('Invalid {} field'.format(field))
-    if 'name' in mailbox and not isinstance(mailbox['name'], basestring):
+    if 'name' in recipient and not isinstance(recipient['name'], basestring):
         raise InputError('Invalid {} field'.format(field))
 
-    return (mailbox.get('name', ''), mailbox.get('email', ''))
+    return (recipient.get('name', ''), recipient.get('email', ''))
 
 
 def get_calendar(calendar_public_id, namespace, db_session):
