@@ -52,7 +52,7 @@ class SMTPConnection(object):
             return
 
     def setup(self):
-        host, port = self.smtp_endpoint
+        host, port, is_secure = self.smtp_endpoint
         if port == SMTP_OVER_SSL_PORT:
             self.connection = smtplib.SMTP_SSL()
             self.connection.connect(host, port)
@@ -61,10 +61,12 @@ class SMTPConnection(object):
             self.connection.connect(host, port)
             # Put the SMTP connection in TLS mode
             self.connection.ehlo()
-            if not self.connection.has_extn('starttls'):
+            has_starttls = self.connection.has_extn('starttls')
+            if is_secure and not has_starttls:
                 raise SendMailException('Required SMTP STARTTLS not '
                                         'supported.')
-            self.connection.starttls()
+            if has_starttls:
+                self.connection.starttls()
 
         # Auth the connection
         self.connection.ehlo()
@@ -130,14 +132,18 @@ class SMTPConnection(object):
     def smtp_password(self):
         c = self.connection
 
+        username, password = self.auth_token
+        if username is None:
+            username = self.email_address
+
         # Try to auth, but if it fails with the login function, try a manual
         # AUTH LOGIN (see: http://www.harelmalka.com/?p=94 )
         try:
-            c.login(self.email_address, self.auth_token)
+            c.login(username, password)
         except smtplib.SMTPAuthenticationError, e:
             try:
-                c.docmd("AUTH LOGIN", base64.b64encode(self.email_address))
-                c.docmd(base64.b64encode(self.auth_token), "")
+                c.docmd("AUTH LOGIN", base64.b64encode(username))
+                c.docmd(base64.b64encode(password), "")
             except smtplib.SMTPAuthenticationError as e:
                 self.log.error('SMTP Auth failed')
                 raise e
@@ -169,7 +175,7 @@ class SMTPClient(object):
                     'Could not authenticate with the SMTP server.', 403)
         else:
             assert self.auth_type == 'password'
-            self.auth_token = account.password
+            self.auth_token = (account.smtp_username, account.password)
 
     def _send(self, recipients, msg):
         """Send the email message. Retries up to SMTP_MAX_RETRIES times if the

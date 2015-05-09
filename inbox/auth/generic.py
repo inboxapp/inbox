@@ -10,6 +10,7 @@ from inbox.log import get_logger
 log = get_logger()
 
 from inbox.auth.base import AuthHandler
+import inbox.auth.starttls
 from inbox.basicauth import (ConnectionError, ValidationError,
                              TransientConnectionError,
                              UserRecoverableConfigError)
@@ -37,9 +38,11 @@ class GenericAuthHandler(AuthHandler):
         account.provider = provider_name
         if provider_name == 'custom':
             account.imap_endpoint = (response['imap_server_host'],
-                                     response['imap_server_port'])
+                                     response['imap_server_port'],
+                                     True)
             account.smtp_endpoint = (response['smtp_server_host'],
-                                     response['smtp_server_port'])
+                                     response['smtp_server_port'],
+                                     True)
 
         # Ensure account has sync enabled after authing.
         account.enable_sync()
@@ -60,51 +63,30 @@ class GenericAuthHandler(AuthHandler):
         ValidationError
             If the credentials are invalid.
         """
-        host, port = imap_endpoint
-        try:
-            conn = IMAPClient(host, port=port, use_uid=True, ssl=True)
-        except IMAPClient.AbortError as e:
-            log.error('account_connect_failed',
-                      account_id=account_id,
-                      email=email,
-                      host=host,
-                      port=port,
-                      error="[ALERT] Can't connect to host - may be transient")
-            raise TransientConnectionError(str(e))
-        except(IMAPClient.Error, gaierror, socket_error) as e:
-            log.error('account_connect_failed',
-                      account_id=account_id,
-                      email=email,
-                      host=host,
-                      port=port,
-                      error='[ALERT] (Failure): {0}'.format(str(e)))
-            raise ConnectionError(str(e))
+        conn = self.connect_to_imap(imap_endpoint)
 
-        conn.debug = False
+        username, password = credential
+        if username is None:
+            username = email
+
         try:
-            conn.login(email, credential)
+            conn.login(username, password)
         except IMAPClient.AbortError as e:
             log.error('account_verify_failed',
                       account_id=account_id,
                       email=email,
-                      host=host,
-                      port=port,
                       error="[ALERT] Can't connect to host - may be transient")
             raise TransientConnectionError(str(e))
         except IMAPClient.Error as e:
             log.error('account_verify_failed',
                       account_id=account_id,
                       email=email,
-                      host=host,
-                      port=port,
                       error='[ALERT] Invalid credentials (Failure)')
             raise ValidationError(str(e))
         except SSLError as e:
             log.error('account_verify_failed',
                       account_id=account_id,
                       email=email,
-                      host=host,
-                      port=port,
                       error='[ALERT] SSL Connection error (Failure)')
             raise ConnectionError(str(e))
 
