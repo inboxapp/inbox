@@ -1106,7 +1106,7 @@ def sync_deltas():
     start_time = time.time()
     while time.time() - start_time < LONG_POLL_REQUEST_TIMEOUT:
         with session_scope() as db_session:
-            deltas, _ = delta_sync.format_transactions_after_pointer(
+            deltas, end_pointer = delta_sync.format_transactions_after_pointer(
                 g.namespace, start_pointer, db_session, args['limit'],
                 exclude_types)
 
@@ -1114,8 +1114,9 @@ def sync_deltas():
             'cursor_start': cursor,
             'deltas': deltas,
         }
-        if deltas:
-            response['cursor_end'] = deltas[-1]['cursor']
+        if end_pointer and end_pointer != start_pointer:
+            response['cursor_end'] = db_session.query(Transaction). \
+                get(end_pointer).public_id
             return g.encoder.jsonify(response)
 
         # No changes. perhaps wait
