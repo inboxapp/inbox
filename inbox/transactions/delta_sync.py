@@ -104,8 +104,8 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
 
     Arguments
     ---------
-    namespace_id: int
-        Id of the namespace for which to get changes.
+    namespace: Namespace
+        Namespace for which to get changes.
     pointer: int
         Process transactions starting after this id.
     db_session: InboxSession
@@ -188,7 +188,7 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
     # Finally, sort deltas by id of the underlying transactions.
     results.sort()
     deltas = [delta for _, delta in results]
-    return (deltas, results[-1][0])
+    return (deltas, transactions[-1].id)
 
 
 def streaming_change_generator(namespace, poll_interval, timeout,
