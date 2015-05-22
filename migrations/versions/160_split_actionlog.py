@@ -18,11 +18,11 @@ from sqlalchemy.orm import contains_eager
 def upgrade():
     from inbox.ignition import main_engine
 
+    op.add_column('actionlog', sa.Column('type', sa.String(16)))
+
     engine = main_engine(pool_size=1, max_overflow=0)
     if not engine.has_table('easaccount'):
         return
-
-    op.add_column('actionlog', sa.Column('type', sa.String(16)))
 
     op.create_table('easactionlog',
                     sa.Column('id', sa.Integer()),
