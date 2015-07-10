@@ -21,21 +21,23 @@ color() {
       }
 
 color '36;1' "
-      _____       _
-     |_   _|     | |
-       | |  _ __ | |__   _____  __
-       | | | '_ \| '_ \ / _ \ \/ /
-      _| |_| | | | |_) | (_) >  <
-     |_____|_| |_|_.__/ \___/_/\_\\
-
-     This script installs dependencies for Inbox.
+                                              _            
+                                             (_)           
+  ___ _   _ _ __   ___ ______ ___ _ __   __ _ _ _ __   ___ 
+ / __| | | | '_ \ / __|______/ _ \ '_ \ / _` | | '_ \ / _ \
+ \__ \ |_| | | | | (__      |  __/ | | | (_| | | | | |  __/
+ |___/\__, |_| |_|\___|      \___|_| |_|\__, |_|_| |_|\___|
+       __/ |                             __/ |             
+      |___/                             |___/            
+      
+     This script installs dependencies for sync-engine.
 
      For more details, visit:
-     https://www.github.com/inboxapp/inbox
+     https://github.com/nylas/sync-engine/
 "
 
 if ! [ -e ./setup.py ] || ! [ -e ./setup.sh ] ; then
-    color '31;1' "Error: setup.sh should be run from the inbox repo" >&2
+    color '31;1' "Error: setup.sh should be run from the sync-engine repo" >&2
     exit 1
 fi
 
