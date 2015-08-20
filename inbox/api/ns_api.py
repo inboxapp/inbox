@@ -303,7 +303,7 @@ def message_query_api():
     g.parser.add_argument('from', type=bounded_str, location='args', action='append')
     g.parser.add_argument('cc', type=bounded_str, location='args', action='append')
     g.parser.add_argument('bcc', type=bounded_str, location='args', action='append')
-    g.parser.add_argument('any_email', type=bounded_str, location='args')
+    g.parser.add_argument('any_email', type=bounded_str, location='args', action='append')
     g.parser.add_argument('started_before', type=timestamp, location='args')
     g.parser.add_argument('started_after', type=timestamp, location='args')
     g.parser.add_argument('last_message_before', type=timestamp,
