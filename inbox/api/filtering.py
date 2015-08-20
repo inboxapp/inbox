@@ -251,7 +251,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         to_query = db_session.query(MessageContactAssociation.message_id). \
             join(Contact).filter(
                 MessageContactAssociation.field == 'to_addr',
-                Contact.email_address == to_addr,
+                Contact.email_address.in_(to_addr),
                 Contact.namespace_id == bindparam('namespace_id')).subquery()
         query += lambda q: q.filter(Message.id.in_(to_query))
 
@@ -260,7 +260,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         from_query = db_session.query(MessageContactAssociation.message_id). \
             join(Contact).filter(
                 MessageContactAssociation.field == 'from_addr',
-                Contact.email_address == from_addr,
+                Contact.email_address.in_(from_addr),
                 Contact.namespace_id == bindparam('namespace_id')).subquery()
         query += lambda q: q.filter(Message.id.in_(from_query))
 
@@ -269,7 +269,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         cc_query = db_session.query(MessageContactAssociation.message_id). \
             join(Contact).filter(
                 MessageContactAssociation.field == 'cc_addr',
-                Contact.email_address == cc_addr,
+                Contact.email_address.in_(cc_addr),
                 Contact.namespace_id == bindparam('namespace_id')).subquery()
         query += lambda q: q.filter(Message.id.in_(cc_query))
 
@@ -278,7 +278,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         bcc_query = db_session.query(MessageContactAssociation.message_id). \
             join(Contact).filter(
                 MessageContactAssociation.field == 'bcc_addr',
-                Contact.email_address == bcc_addr,
+                Contact.email_address.in_(bcc_addr),
                 Contact.namespace_id == bindparam('namespace_id')).subquery()
         query += lambda q: q.filter(Message.id.in_(bcc_query))
 
