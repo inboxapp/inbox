@@ -7,6 +7,7 @@ FROM debian:wheezy
 MAINTAINER inboxapp
 RUN apt-get -q update && \
     DEBIAN_FRONTEND=noninteractive apt-get -qy install \
+        mercurial \
         anacron \
         build-essential \
         cron \
@@ -35,7 +36,7 @@ RUN apt-get -q update && \
         tnef \
         wget \
     && \
-    pip install 'setuptools>=5.3' subprocess32 tox
+    pip install 'pip>=1.5.6' 'setuptools>=5.3' subprocess32 tox
 
 RUN useradd -ms /bin/sh admin && \
     install -d -m0775 -o root -g admin /srv/inbox
