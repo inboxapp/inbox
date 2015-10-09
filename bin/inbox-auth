@@ -20,7 +20,9 @@ configure_logging(config.get('LOGLEVEL'))
 @click.argument('email_address')
 @click.option('--reauth', is_flag=True,
               help='Re-authenticate an account even if it already exists')
-def main(email_address, reauth):
+@click.option('--provider', is_flag=False,
+              help='Manually specify the provider instead of trying to detect it')
+def main(email_address, reauth, provider):
     """ Auth an email account. """
     preflight()
 
@@ -31,12 +33,14 @@ def main(email_address, reauth):
             sys.exit('Already have this account!')
 
         auth_info = {}
-        provider = provider_from_address(email_address)
 
-        # Resolve unknown providers into either custom IMAP or EAS.
-        if provider == 'unknown':
-            is_imap = raw_input('IMAP account? [Y/n] ').strip().lower() != 'n'
-            provider = 'custom' if is_imap else 'eas'
+        if not provider:
+            provider = provider_from_address(email_address)
+
+            # Resolve unknown providers into either custom IMAP or EAS.
+            if provider == 'unknown':
+                is_imap = raw_input('IMAP account? [Y/n] ').strip().lower() != 'n'
+                provider = 'custom' if is_imap else 'eas'
 
         auth_info['provider'] = provider
         auth_handler = handler_from_provider(provider)
