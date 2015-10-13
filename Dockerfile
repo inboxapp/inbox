@@ -7,7 +7,6 @@ FROM debian:wheezy
 MAINTAINER inboxapp
 RUN apt-get -q update && \
     DEBIAN_FRONTEND=noninteractive apt-get -qy install \
-        mercurial \
         anacron \
         build-essential \
         cron \
@@ -21,6 +20,7 @@ RUN apt-get -q update && \
         libxml2-dev \
         libxslt-dev \
         libzmq-dev \
+        mercurial \
         mysql-client \
         net-tools \
         procps \
