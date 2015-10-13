@@ -46,8 +46,8 @@ def main(target_hostname):
                 format(schema_name))
             base_engine.execute(
                 "GRANT ALL PRIVILEGES ON {schema_name}.* TO "
-                "{mysql_user}@localhost IDENTIFIED BY '{mysql_user}'".
-                format(mysql_user=mysql_user, schema_name=schema_name))
+                "{mysql_user}@localhost IDENTIFIED BY '{mysql_password}'".
+                format(mysql_user=mysql_user, mysql_password=mysql_password, schema_name=schema_name))
 
             engine = engine_manager.engines[int(key)]
 
