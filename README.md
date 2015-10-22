@@ -38,7 +38,7 @@ The sync engine will automatically begin syncing your account with the underlyin
 The Nylas API service provides a REST API for interacting with your data. To start it in your development environment, run command below from the `/vagrant` folder within your VM:
 
 ```bash
-$ bin/inbox-api
+bin/inbox-api
 ```
 
 This will start the API Server on port 5555. At this point **You're now ready to make requests!** If you're using VirtualBox or VMWare fusion with Vagrant, port 5555 has already been forwarded to your host machine, so you can hit the API from your regular web browser.
