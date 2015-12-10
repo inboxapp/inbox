@@ -20,6 +20,7 @@ RUN apt-get -q update && \
         libxml2-dev \
         libxslt-dev \
         libzmq-dev \
+        mercurial \
         mysql-client \
         net-tools \
         procps \
@@ -35,7 +36,7 @@ RUN apt-get -q update && \
         tnef \
         wget \
     && \
-    pip install 'setuptools>=5.3' subprocess32 tox
+    pip install 'pip>=1.5.6' 'setuptools>=5.3' subprocess32 tox
 
 RUN useradd -ms /bin/sh admin && \
     install -d -m0775 -o root -g admin /srv/inbox
