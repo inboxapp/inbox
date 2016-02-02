@@ -25,7 +25,9 @@ The Nylas Sync Engine provides a RESTful API on top of a powerful email sync pla
 
 And _voilà_! Auth an account via the commandline to start syncing:
 
-    bin/inbox-auth ben.bitdiddle1861@gmail.com
+```
+bin/inbox-auth ben.bitdiddle1861@gmail.com
+```
 
 The `inbox-auth` command will walk you through the process of obtaining an authorization token from Google or another service for syncing your mail. In the open-source version of the sync engine, your credentials are stored to the local MySQL database for simplicity. The open-source Nylas Sync Engine does not support Exchange, but the [hosted](https://www.nylas.com) version does.
 
@@ -35,9 +37,8 @@ The sync engine will automatically begin syncing your account with the underlyin
 
 The Nylas API service provides a REST API for interacting with your data. To start it in your development environment, run command below from the `/vagrant` folder within your VM:
 
-```
-:::bash
-$ bin/inbox-api
+```bash
+bin/inbox-api
 ```
 
 This will start the API Server on port 5555. At this point **You're now ready to make requests!** If you're using VirtualBox or VMWare fusion with Vagrant, port 5555 has already been forwarded to your host machine, so you can hit the API from your regular web browser.
@@ -46,7 +47,9 @@ You can get a list of all connected accounts by requesting `http://localhost:555
 
 For subsequent requests to retreive mail, contacts, and calendar data, your app should pass the `account_id` value from the previous step as the "username" parameter in HTTP Basic auth. For example:
 
-`curl --user 'ACCOUNT_ID_VALUE_HERE:' http://localhost:5555/threads
+```
+curl --user 'ACCOUNT_ID_VALUE_HERE:' http://localhost:5555/threads
+```
 
 If you are using a web browser and would like to clear your cached HTTP Basic Auth values, simply visit http://localhost:5555/logout and click "Cancel".
 
