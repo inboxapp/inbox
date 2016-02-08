@@ -73,7 +73,6 @@ setup(
              'bin/inbox-auth',
              'bin/delete-account-data',
              'bin/create-db',
-             'bin/create-test-db',
              'bin/verify-db',
              'bin/migrate-db',
              'bin/stamp-db',
