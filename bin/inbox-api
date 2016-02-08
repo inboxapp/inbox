@@ -35,8 +35,9 @@ http_server = None
               help='Also start the syncback service')
 @click.option('-c', '--config', default=None,
               help='Path to JSON configuration file.')
+@click.option('-h', '--host', default='', help='Host to run flask app on.')
 @click.option('-p', '--port', default=5555, help='Port to run flask app on.')
-def main(prod, start_syncback, config, port):
+def main(prod, start_syncback, config, host, port):
     """ Launch the Inbox API service. """
     configure_logging(log_level=inbox_config.get('LOGLEVEL'))
 
@@ -45,14 +46,14 @@ def main(prod, start_syncback, config, port):
         load_overrides(config_path)
 
     if prod:
-        start(port, start_syncback)
+        start(host, port, start_syncback)
     else:
         preflight()
         from werkzeug.serving import run_with_reloader
-        run_with_reloader(lambda: start(port, start_syncback))
+        run_with_reloader(lambda: start(host, port, start_syncback))
 
 
-def start(port, start_syncback):
+def start(host, port, start_syncback):
     # We need to import this down here, because this in turn imports
     # ignition.engine, which has to happen *after* we read any config overrides
     # for the database parameters. Boo for imports with side-effects.
@@ -66,7 +67,7 @@ def start(port, start_syncback):
 
     nylas_logger = get_logger()
 
-    http_server = WSGIServer(('', int(port)), app, log=nylas_logger,
+    http_server = WSGIServer((host, int(port)), app, log=nylas_logger,
                              handler_class=NylasWSGIHandler)
     nylas_logger.info('Starting API server', port=port)
     http_server.serve_forever()
