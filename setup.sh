@@ -62,11 +62,11 @@ apt-get -qq -y install python-software-properties
 
 { \
 echo "mysql-community-server mysql-community-server/data-dir select ''"; \
-echo "mysql-community-server mysql-community-server/root-pass password root"; \
-echo "mysql-community-server mysql-community-server/re-root-pass password root"; \
+echo "mysql-community-server mysql-community-server/root-pass password ''"; \
+echo "mysql-community-server mysql-community-server/re-root-pass password ''"; \
 echo "mysql-community-server mysql-community-server/remove-test-db select false"; \
-echo "mysql-server mysql-server/root_password password root";
-echo "mysql-server mysql-server/root_password_again password root";
+echo "mysql-server mysql-server/root_password password ''";
+echo "mysql-server mysql-server/root_password_again password ''";
   } | sudo debconf-set-selections
 
 
@@ -271,7 +271,7 @@ if ! $prod; then
     sleep 10
 
     bin/create-db
-    bin/create-test-db
+
 fi
 
 if [[ $(mysql --version) != *"5.6"* ]]
