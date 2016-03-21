@@ -309,6 +309,13 @@ providers = dict([
                        # Postini
                        "*.psmtp.com"],
     }),
+    ("tiliq", {
+        "type": "generic",
+        "imap": ("imap.us-west-2.tiliq.com", 993),
+        "smtp": ("smtp.tiliq.com", 587),
+        "auth": "password",
+        "mx_servers": ["mx[12].(us-west-2.)?tiliq.com"]
+        
     ("custom", {
         "type": "generic",
         "auth": "password",
