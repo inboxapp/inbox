@@ -100,6 +100,8 @@ apt-get -y install git \
                    lua5.2 \
                    liblua5.2-dev \
 
+apt-get --purge remove -y python-cffi
+
 # Switch to a temporary directory to install dependencies, since the source
 # directory might be mounted from a VM host with weird permissions.
 src_dir=$(pwd)
