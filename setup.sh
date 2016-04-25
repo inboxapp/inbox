@@ -100,9 +100,6 @@ apt-get -y install git \
                    lua5.2 \
                    liblua5.2-dev \
 
-# Upgrade pip
-pip install -U pip
-
 # Switch to a temporary directory to install dependencies, since the source
 # directory might be mounted from a VM host with weird permissions.
 src_dir=$(pwd)
