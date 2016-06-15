@@ -58,7 +58,7 @@ ACTION_MAX_NR_OF_RETRIES = 20
 class SyncbackService(gevent.Greenlet):
     """Asynchronously consumes the action log and executes syncback actions."""
 
-    def __init__(self, syncback_id, cpu_id, total_cpus, poll_interval=1,
+    def __init__(self, syncback_id, cpu_id, total_cpus=1, poll_interval=1,
                  retry_interval=30):
         self.cpu_id = cpu_id
         self.total_cpus = total_cpus
