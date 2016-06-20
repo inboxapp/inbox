@@ -60,12 +60,6 @@ def empty_db(config):
     engine.session.close()
 
 
-@fixture(autouse=True)
-def mock_redis(monkeypatch):
-    monkeypatch.setattr("inbox.heartbeat.store.HeartbeatStore.__init__",
-                        lambda *args, **kwargs: None)
-
-
 @yield_fixture
 def test_client(db):
     from inbox.api.srv import app
@@ -114,7 +108,7 @@ def make_default_account(db, config):
 
     ns = Namespace()
     account = GmailAccount(
-        sync_host=platform.node(),
+        sync_host='{}:{}'.format(platform.node(), 0),
         email_address='inboxapptest@gmail.com')
     account.namespace = ns
     account.create_emailed_events_calendar()
@@ -135,7 +129,6 @@ def make_default_account(db, config):
     db.session.add(auth_creds)
     db.session.commit()
     return account
-
 
 
 @fixture(scope='function')
@@ -205,10 +198,10 @@ class ContactsProviderStub(object):
         return self._contacts
 
 
-def add_fake_folder(db_session, default_account):
+def add_fake_folder(db_session, default_account, display_name='All Mail',
+                    name='all'):
     from inbox.models.folder import Folder
-    return Folder.find_or_create(db_session, default_account,
-                                 'All Mail', 'all')
+    return Folder.find_or_create(db_session, default_account, display_name, name)
 
 
 def add_generic_imap_account(db_session, email_address='test@nylas.com'):
@@ -218,6 +211,23 @@ def add_generic_imap_account(db_session, email_address='test@nylas.com'):
     account = GenericAccount(email_address=email_address,
                              sync_host=platform.node(),
                              provider='custom')
+    account.imap_endpoint = ('imap.custom.com', 993)
+    account.smtp_endpoint = ('smtp.custom.com', 587)
+    account.imap_password = 'bananagrams'
+    account.smtp_password = 'bananagrams'
+    account.namespace = Namespace()
+    db_session.add(account)
+    db_session.commit()
+    return account
+
+
+def add_fake_yahoo_account(db_session, email_address='cypresstest@yahoo.com'):
+    import platform
+    from inbox.models.backends.generic import GenericAccount
+    from inbox.models import Namespace
+    account = GenericAccount(email_address=email_address,
+                             sync_host=platform.node(),
+                             provider='yahoo')
     account.imap_password = 'bananagrams'
     account.smtp_password = 'bananagrams'
     account.namespace = Namespace()
@@ -342,6 +352,7 @@ def add_fake_event(db_session, namespace_id, calendar=None,
                   all_day=all_day,
                   raw_data='',
                   uid=str(uuid.uuid4()))
+    event.sequence_number = 0
     db_session.add(event)
     db_session.commit()
     return event

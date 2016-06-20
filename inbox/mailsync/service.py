@@ -1,8 +1,11 @@
 import platform
+import random
+import collections
 
 import gevent
 from gevent.lock import BoundedSemaphore
 from sqlalchemy.exc import OperationalError
+import psutil
 
 from inbox.providers import providers
 from inbox.config import config
@@ -22,6 +25,12 @@ from inbox.mailsync.backends import module_registry
 USE_GOOGLE_PUSH_NOTIFICATIONS = \
     'GOOGLE_PUSH_NOTIFICATIONS' in config.get('FEATURE_FLAGS', [])
 
+# How much time (in minutes) should all CPUs be over 90% to consider them
+# overloaded.
+OVERLOAD_MIN = 20
+SYNC_POLL_INTERVAL = 10
+NUM_CPU_SAMPLES = (OVERLOAD_MIN * 60) / SYNC_POLL_INTERVAL
+
 
 class SyncService(object):
     """
@@ -36,7 +45,8 @@ class SyncService(object):
     poll_interval : int
         Seconds between polls for account changes.
     """
-    def __init__(self, process_identifier, cpu_id, poll_interval=10):
+    def __init__(self, process_identifier, cpu_id,
+                 poll_interval=SYNC_POLL_INTERVAL):
         self.host = platform.node()
         self.cpu_id = cpu_id
         self.process_identifier = process_identifier
@@ -63,6 +73,15 @@ class SyncService(object):
         self.stealing_enabled = config.get('SYNC_STEAL_ACCOUNTS', True)
         self.zone = config.get('ZONE')
         self.queue_client = QueueClient(self.zone)
+        self.rolling_cpu_counts = collections.deque(maxlen=NUM_CPU_SAMPLES)
+
+        # Fill the queue with initial values. Because of the way
+        # cpu_percent works, it'll always return 0.0 the first time
+        # we call it. See: https://pythonhosted.org/psutil/#psutil.cpu_percent
+        # for more details.
+        null_cpu_values = psutil.cpu_percent(percpu=True)
+        for i in range(NUM_CPU_SAMPLES):
+            self.rolling_cpu_counts.append(null_cpu_values)
 
     def run(self):
         retry_with_logging(self._run_impl, self.log)
@@ -76,11 +95,59 @@ class SyncService(object):
             self.poll()
             gevent.sleep(self.poll_interval)
 
+    def _pick_account(self):
+        """
+        Pick an account to unload. We choose one at random, but we should
+        probably be smarter, for example by picking one of the most
+        newly created syncs.
+        """
+
+        if len(self.syncing_accounts) == 0:
+            return None
+
+        account = random.sample(self.syncing_accounts, 1)[0]
+        self.syncing_accounts.remove(account)
+        return account
+
+    def _compute_cpu_average(self):
+        """
+        Use our CPU data to compute the average CPU usage for this machine.
+        """
+
+        # We can just zip and sum the data because psutil always returns
+        # results in the same order.
+        return [sum(x) / float(NUM_CPU_SAMPLES) for x in zip(*self.rolling_cpu_counts)]
+
     def poll(self):
-        if self.stealing_enabled:
+        # We really don't want to take on more load than we can bear, so we
+        # need to check the CPU usage before accepting new accounts.
+        # Note that we can't check this for the current core because the kernel
+        # transparently moves programs across cores.
+        usage_per_cpu = psutil.cpu_percent(percpu=True)
+        self.rolling_cpu_counts.append(usage_per_cpu)
+
+        cpu_averages = self._compute_cpu_average()
+
+        has_overloaded_cpus = all([cpu_usage > 90.0 for cpu_usage in cpu_averages])
+        cpus_over_nominal = all([cpu_usage > 85.0 for cpu_usage in cpu_averages])
+
+        # Conservatively, stop accepting accounts if the CPU usage is over 85%
+        # for every core.
+        if self.stealing_enabled and not cpus_over_nominal:
             r = self.queue_client.claim_next(self.process_identifier)
             if r:
                 self.log.info('Claimed new account sync', account_id=r)
+
+        if has_overloaded_cpus:
+            # Unload a single account.
+            acc = self._pick_account()
+
+            if acc is not None:
+                self.log.info('Overloaded CPU, unloading account',
+                              account_id=acc)
+                self.stop_sync(acc)
+            else:
+                self.log.error("Couldn't find an account to unload!")
 
         # Determine which accounts to sync
         start_accounts = self.accounts_to_sync()
@@ -200,8 +267,8 @@ class SyncService(object):
                 acc = db_session.query(Account).get(account_id)
                 if not acc.sync_should_run:
                     clear_heartbeat_status(acc.id)
-                self.log.info('sync stopped', account_id=account_id)
-                acc.sync_stopped()
+                if acc.sync_stopped(self.process_identifier):
+                    self.log.info('sync stopped', account_id=account_id)
 
             r = self.queue_client.unassign(account_id, self.process_identifier)
             return r

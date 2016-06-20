@@ -7,6 +7,7 @@ from collections import OrderedDict
 
 from inbox.config import config
 from inbox.models import Account
+from inbox.util.stats import statsd_client
 from inbox.models.session import session_scope
 from nylas.logging.sentry import log_uncaught_errors
 from inbox.heartbeat.status import clear_heartbeat_status
@@ -22,7 +23,7 @@ log = get_logger()
 def reconcile_message(new_message, session):
     """
     Check to see if the (synced) Message instance new_message was originally
-    created/sent via the Inbox API (based on the X-Inbox-Uid header. If so,
+    created/sent via the Nylas API (based on the X-Inbox-Uid header. If so,
     update the existing message with new attributes from the synced message
     and return it.
 
@@ -92,15 +93,18 @@ def transaction_objects():
     }
 
 
-def delete_marked_accounts(shard_id, throttle=False, dry_run=False):
-    start = time.time()
-    deleted_count = 0
+def get_accounts_to_delete(shard_id):
     ids_to_delete = []
-
     with session_scope_by_shard_id(shard_id) as db_session:
         ids_to_delete = [(acc.id, acc.namespace.id) for acc
                          in db_session.query(Account) if acc.is_deleted]
+    return ids_to_delete
 
+
+def delete_marked_accounts(shard_id, ids_to_delete, throttle=False, dry_run=False):
+    start = time.time()
+
+    deleted_count = 0
     for account_id, namespace_id in ids_to_delete:
         try:
             with session_scope(namespace_id) as db_session:
@@ -116,7 +120,7 @@ def delete_marked_accounts(shard_id, throttle=False, dry_run=False):
                     continue
 
             log.info('Deleting account', account_id=account_id)
-
+            start_time = time.time()
             # Delete data in database
             try:
                 log.info('Deleting database data', account_id=account_id)
@@ -130,7 +134,10 @@ def delete_marked_accounts(shard_id, throttle=False, dry_run=False):
             # Delete liveness data
             log.debug('Deleting liveness data', account_id=account_id)
             clear_heartbeat_status(account_id)
+
             deleted_count += 1
+            statsd_client.timing('mailsync.account_deletion.queue.deleted',
+                                 time.time() - start_time)
         except Exception:
             log_uncaught_errors(log, account_id=account_id)
 
@@ -177,7 +184,8 @@ def delete_namespace(account_id, namespace_id, throttle=False, dry_run=False):
             filters['easfoldersyncstatus'] = ('account_id', account_id)
 
     for cls in filters:
-        _batch_delete(engine, cls, filters[cls], throttle=throttle, dry_run=dry_run)
+        _batch_delete(engine, cls, filters[cls], throttle=throttle,
+                      dry_run=dry_run)
 
     # Use a single delete for the other tables. Rows from tables which contain
     # cascade-deleted foreign keys to other tables deleted here (or above)
@@ -220,7 +228,8 @@ def delete_namespace(account_id, namespace_id, throttle=False, dry_run=False):
             db_session.commit()
 
 
-def _batch_delete(engine, table, xxx_todo_changeme, throttle=False, dry_run=False):
+def _batch_delete(engine, table, xxx_todo_changeme, throttle=False,
+                  dry_run=False):
     (column, id_) = xxx_todo_changeme
     count = engine.execute(
         'SELECT COUNT(*) FROM {} WHERE {}={};'.format(table, column, id_)).\
@@ -236,13 +245,20 @@ def _batch_delete(engine, table, xxx_todo_changeme, throttle=False, dry_run=Fals
              batches=batches)
     start = time.time()
 
-    query = 'DELETE FROM {} WHERE {}={} LIMIT 1000;'.format(table, column, id_)
+    query = 'DELETE FROM {} WHERE {}={} LIMIT 2000;'.format(table, column, id_)
 
     for i in range(0, batches):
         if throttle and check_throttle():
             log.info("Throttling deletion")
             gevent.sleep(60)
         if dry_run is False:
+            if table == "message":
+                # messages must be order by the foreign key `received_date`
+                # otherwise MySQL will raise an error when deleting
+                # from the message table
+                query = ('DELETE FROM message WHERE {}={} '
+                         'ORDER BY received_date desc LIMIT 2000;'
+                         .format(column, id_))
             engine.execute(query)
         else:
             log.debug(query)
@@ -252,22 +268,93 @@ def _batch_delete(engine, table, xxx_todo_changeme, throttle=False, dry_run=Fals
 
 
 def check_throttle():
+    """
+    Returns True if deletions should be throttled and False otherwise.
+
+    The current logic throttles deletions if any production sync-mysql-node
+    slaves are over 10 seconds behind their master, or if the average CPU load
+    across the production sync-mysql-node fleet is above 70%.
+
+    check_throttle is ignored entirely if the separate `throttle` flag is False
+    (meaning that throttling is not done at all), but if throttling is enabled,
+    this method determines when.
+
+    """
     # Ensure replica lag is not spiking
     base_url = config["UMPIRE_BASE_URL"]
-    replica_lag_url = ("https://{}/check?metric=maxSeries(servers.prod.sync-mysql-node.*.mysql."
-                       "Seconds_Behind_Master)&max=10&min=0&range=300".format(base_url))
+    replica_lag_url = ("https://{}/check?metric=maxSeries(servers.prod."
+                       "sync-mysql-node.*.mysql.Seconds_Behind_Master)"
+                       "&max=10&min=0&range=300".format(base_url))
 
-    cpu_url = ('https://{}/check?metric=maxSeries(offset(scale(groupByNode(servers.prod.sync'
-               '-mysql-node.*.cpu.cpu*.idle,3,"averageSeries"),-1),100))&max=70&min=0&range=300'.format(base_url))
+    cpu_url = ('https://{}/check?metric=maxSeries(offset(scale(groupByNode('
+               'servers.prod.sync-mysql-node.*.cpu.cpu*.idle,3,'
+               '"averageSeries"),-1),100))&max=70&min=0&range=300'.
+               format(base_url))
 
     replica_lag_status_code = requests.get(replica_lag_url).status_code
     cpu_status_code = requests.get(cpu_url).status_code
     if replica_lag_status_code != 200 or cpu_status_code != 200:
         return True
 
-    # Stop deletion before backups are scheduled to start(1am UTC)
-    # and resume when backups complete (~9:30am, but set to 10am to
-    # leave room for error)
+    # Stop deletion before backups are scheduled to start and resume
+    # when backups complete (~8.5 hours later but allow 9h just in case)
+    #
+    # Unifying this with the actual backup timing is tracked in
+    # https://phab.nylas.com/T6786
+    backup_start_hour_utc = 8  # CHANGE THIS if backups get rescheduled
+    backup_duration_hours = 9  # CHANGE THIS if backup length changes much
+    backup_end_hour_utc = (backup_start_hour_utc + backup_duration_hours) % 24
     now = datetime.datetime.utcnow()
-    if now.hour < 10:
+    # We are trying to throttle during a specific backup window of
+    # <backup_duration_hours> hours, but the window may wrap around from one
+    # day to the next, making it difficult to do a naive hour comparison.
+    #
+    # Therefore we have to compare the current hour to the backup window in
+    # multiple chunks. First we compare to the part of the window in the same
+    # day as when the backup started, and then we compare to the part of the
+    # window in the next day.
+    if (now.hour >= backup_start_hour_utc and
+            now.hour < min(backup_start_hour_utc + backup_duration_hours, 24)):
         return True
+    elif (backup_end_hour_utc <= backup_start_hour_utc and
+              now.hour < backup_end_hour_utc and
+              now.hour >= (backup_end_hour_utc - backup_duration_hours)):
+        return True
+    else:
+        return False
+
+
+def purge_transactions(shard_id, days_ago=60, limit=1000, throttle=False,
+                       dry_run=False):
+    # Delete all items from the transaction table that are older than
+    # `days_ago` days.
+    if dry_run:
+        offset = 0
+        query = ("SELECT id FROM transaction where created_at < "
+                 "DATE_SUB(now(), INTERVAL {} day) LIMIT {}".
+                 format(days_ago, limit))
+    else:
+        query = ("DELETE FROM transaction where created_at < DATE_SUB(now(),"
+                 " INTERVAL {} day) LIMIT {}".format(days_ago, limit))
+    try:
+        # delete from rows until there are no more rows affected
+        rowcount = 1
+        while rowcount > 0:
+            while throttle and check_throttle():
+                log.info("Throttling deletion")
+                gevent.sleep(60)
+            with session_scope_by_shard_id(shard_id, versioned=False) as \
+                    db_session:
+                if dry_run:
+                    rowcount = db_session.execute("{} OFFSET {}".
+                                                  format(query, offset)).\
+                                                    rowcount
+                    offset += rowcount
+                else:
+                    rowcount = db_session.execute(query).rowcount
+            log.info("Deleted batch from transaction table", batch_size=limit,
+                     rowcount=rowcount)
+        log.info("Finished purging transaction table for shard",
+                 shard_id=shard_id, date_delta=days_ago)
+    except Exception as e:
+        log.critical("Exception encountered during deletion", exception=e)

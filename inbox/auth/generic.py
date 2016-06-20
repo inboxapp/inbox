@@ -9,11 +9,12 @@ log = get_logger()
 
 from inbox.auth.base import AuthHandler, account_or_none
 from inbox.basicauth import (ValidationError, UserRecoverableConfigError,
-                             SSLNotSupportedError)
+                             SSLNotSupportedError, SettingUpdateError)
 from inbox.models import Namespace
 from inbox.models.backends.generic import GenericAccount
 from inbox.sendmail.smtp.postel import SMTPClient
-
+from inbox.util.url import matching_subdomains
+from inbox.crispin import CrispinClient
 
 PROVIDER = 'generic'
 AUTH_HANDLER_CLS = 'GenericAuthHandler'
@@ -86,12 +87,22 @@ class GenericAuthHandler(AuthHandler):
 
         if self.provider_name == 'custom':
             for attribute in ('imap_server_host', 'smtp_server_host'):
-                value = getattr(account, '_{}'.format(attribute), None)
-                if (response.get(attribute) and value and
-                        response[attribute] != value):
-                    raise UserRecoverableConfigError(
-                        "Updating IMAP/ SMTP endpoints is not permitted. "
-                        "Please contact Nylas support to do so.")
+                old_value = getattr(account, '_{}'.format(attribute), None)
+                new_value = response.get(attribute)
+                if (new_value and old_value and new_value != old_value):
+                    # Before updating the domain name, check if:
+                    # 1/ they have the same parent domain
+                    # 2/ they direct to the same IP.
+                    if not matching_subdomains(new_value, old_value):
+                        raise SettingUpdateError(
+                            "Updating the IMAP/SMTP servers is not permitted. Please "
+                            "verify that the server names you entered are correct. "
+                            "If your IMAP/SMTP server has in fact changed, please "
+                            "contact Nylas support to update it. More details here: "
+                            "https://support.nylas.com/hc/en-us/articles/218006767")
+
+                    # If all those conditions are met, update the address.
+                    setattr(account, '_{}'.format(attribute), new_value)
 
         account.ssl_required = response.get('ssl_required', True)
 
@@ -197,21 +208,26 @@ class GenericAuthHandler(AuthHandler):
         """
         # Verify IMAP login
         conn = self.connect_account(account)
+        crispin = CrispinClient(account.id, account.provider_info,
+                                account.email_address, conn)
+
         info = account.provider_info
         if "condstore" not in info:
             if self._supports_condstore(conn):
                 account.supports_condstore = True
         try:
             conn.list_folders()
+            account.folder_separator = crispin.folder_separator
+            account.folder_prefix = crispin.folder_prefix
         except Exception as e:
             log.error("account_folder_list_failed",
                       email=account.email_address,
                       account_id=account.id,
                       error=e.message)
-            raise UserRecoverableConfigError("Full IMAP support is not "
-                                             "enabled for this account. "
-                                             "Please contact your domain "
-                                             "administrator and try again.")
+            error_message = ("Full IMAP support is not enabled for this account. "
+                             "Please contact your domain "
+                             "administrator and try again.")
+            raise UserRecoverableConfigError(error_message)
         finally:
             conn.logout()
 
@@ -222,13 +238,41 @@ class GenericAuthHandler(AuthHandler):
             smtp_client = SMTPClient(account)
             with smtp_client._get_connection():
                 pass
+        except socket.gaierror as exc:
+            log.error('Failed to resolve SMTP server domain',
+                      email=account.email_address,
+                      account_id=account.id,
+                      error=exc)
+            error_message = ("Couldn't resolve the SMTP server domain name. "
+                             "Please check that your SMTP settings are correct.")
+            raise UserRecoverableConfigError(error_message)
+
+        except socket.timeout as exc:
+            log.error('TCP timeout when connecting to SMTP server',
+                      email=account.email_address,
+                      account_id=account.id,
+                      error=exc)
+
+            error_message = ("Connection timeout when connecting to SMTP server. "
+                             "Please check that your SMTP settings are correct.")
+            raise UserRecoverableConfigError(error_message)
+
         except Exception as exc:
             log.error('Failed to establish an SMTP connection',
                       email=account.email_address,
+                      smtp_endpoint=account.smtp_endpoint,
                       account_id=account.id,
                       error=exc)
             raise UserRecoverableConfigError("Please check that your SMTP "
                                              "settings are correct.")
+
+        # Reset the sync_state to 'running' on a successful re-auth.
+        # Necessary for API requests to proceed and an account modify delta to
+        # be returned to delta/ streaming clients.
+        # NOTE: Setting this does not restart the sync. Sync scheduling occurs
+        # via the sync_should_run bit (set to True in update_account() above).
+        account.sync_state = ('running' if account.sync_state else
+                              account.sync_state)
         return True
 
     def interactive_auth(self, email_address):
@@ -249,8 +293,8 @@ class GenericAuthHandler(AuthHandler):
             smtp_pwm = 'SMTP password for {0} (empty for same as IMAP): '
             smtp_p = getpass.getpass(smtp_pwm.format(email_address)) or imap_p
 
-            ssl_required = raw_input('Require SSL? (empty for True): ').\
-                strip() or True
+            ssl_required = raw_input('Require SSL? [Y/n] ').strip().\
+                lower() != 'n'
 
             response.update(imap_server_host=imap_server_host,
                             imap_server_port=imap_server_port,
@@ -283,7 +327,8 @@ def _auth_is_invalid(exc):
         'invalid login or password',
         'login login error password error',
         '[auth] authentication failed.',
-        'invalid login credentials'
+        'invalid login credentials',
+        '[ALERT] Please log in via your web browser',
     )
     return any(exc.message.lower().startswith(msg) for msg in
                AUTH_INVALID_PREFIXES)

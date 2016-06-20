@@ -14,6 +14,11 @@ class GenericAccount(ImapAccount):
     provider = Column(String(64))
     imap_username = Column(String(255), nullable=True)
     smtp_username = Column(String(255), nullable=True)
+
+    # The IMAP specs says folder separators always are one character-long
+    # but you never know.
+    folder_separator = Column(String(16), default='.')
+    folder_prefix = Column(String(191), default='')
     supports_condstore = Column(Boolean)
 
     # IMAP Secret
@@ -120,3 +125,11 @@ class GenericAccount(ImapAccount):
     def actionlog_cls(self):
         from inbox.models.action_log import ActionLog
         return ActionLog
+
+    @property
+    def server_settings(self):
+        settings = {}
+        settings['imap_host'], settings['imap_port'] = self.imap_endpoint
+        settings['smtp_host'], settings['smtp_port'] = self.smtp_endpoint
+        settings['ssl_required'] = self.ssl_required
+        return settings

@@ -5,13 +5,14 @@ from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 
 from inbox.models.base import MailSyncBase
 from inbox.models.category import Category
+from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
 from inbox.models.constants import MAX_FOLDER_NAME_LENGTH
 from inbox.sqlalchemy_ext.util import bakery
 from nylas.logging import get_logger
 log = get_logger()
 
 
-class Folder(MailSyncBase):
+class Folder(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     """ Folders from the remote account backend (Generic IMAP/ Gmail). """
     # TOFIX this causes an import error due to circular dependencies
     # from inbox.models.account import Account
@@ -36,8 +37,9 @@ class Folder(MailSyncBase):
     # folders as per
     # https://msdn.microsoft.com/en-us/library/ee624913(v=exchg.80).aspx
     name = Column(String(MAX_FOLDER_NAME_LENGTH, collation='utf8mb4_bin'),
-                  nullable=True)
-    canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=True)
+                  nullable=False)
+    canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=False,
+                            default='')
 
     category_id = Column(ForeignKey(Category.id, ondelete='CASCADE'))
     category = relationship(
@@ -70,6 +72,7 @@ class Folder(MailSyncBase):
             name = name[:MAX_FOLDER_NAME_LENGTH]
         q = q.filter(cls.name == name)
 
+        role = role or ''
         try:
             obj = q.one()
         except NoResultFound:
@@ -83,7 +86,7 @@ class Folder(MailSyncBase):
                      .format(name, account.id))
             raise
 
-        if obj.canonical_name is None:
+        if not obj.canonical_name:
             obj.canonical_name = role
 
         return obj
@@ -94,4 +97,5 @@ class Folder(MailSyncBase):
         q += lambda q: q.filter(cls.id == bindparam('id_'))
         return q(session).params(id_=id_).first()
 
-    __table_args__ = (UniqueConstraint('account_id', 'name'),)
+    __table_args__ = \
+        (UniqueConstraint('account_id', 'name', 'canonical_name'),)

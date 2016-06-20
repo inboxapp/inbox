@@ -1,3 +1,5 @@
+import random
+from datetime import datetime
 from flask import request, g, Blueprint, make_response
 from flask import jsonify
 from sqlalchemy.orm.exc import NoResultFound
@@ -31,7 +33,7 @@ def resp(http_code, message=None, **kwargs):
 
 @app.before_request
 def start():
-    g.log = get_logger()
+    g.log = get_logger().new(endpoint=request.endpoint)
 
     try:
         watch_state = request.headers[GOOGLE_RESOURCE_STATE_STRING]
@@ -39,6 +41,10 @@ def start():
         g.watch_resource_id = request.headers[GOOGLE_RESOURCE_ID_STRING]
     except KeyError:
         raise InputError('Malformed headers')
+
+    g.log.bind(watch_state=watch_state,
+               watch_channel_id=g.watch_channel_id,
+               watch_resource_id=g.watch_resource_id)
 
     if watch_state == 'sync':
         return resp(204)
@@ -54,7 +60,8 @@ def handle_input_error(error):
 
 @app.route('/calendar_list_update/<account_public_id>', methods=['POST'])
 def calendar_update(account_public_id):
-
+    g.log.info('Received request to update Google calendar list',
+               account_public_id=account_public_id)
     try:
         valid_public_id(account_public_id)
         with global_session_scope() as db_session:
@@ -75,12 +82,24 @@ def calendar_update(account_public_id):
 
 @app.route('/calendar_update/<calendar_public_id>', methods=['POST'])
 def event_update(calendar_public_id):
+    g.log.info('Received request to update Google calendar',
+               calendar_public_id=calendar_public_id)
     try:
         valid_public_id(calendar_public_id)
         with global_session_scope() as db_session:
             calendar = db_session.query(Calendar) \
                 .filter(Calendar.public_id == calendar_public_id) \
                 .one()
+            if calendar.gpush_last_ping is not None:
+                time_since_last_ping = (
+                    datetime.utcnow() - calendar.gpush_last_ping
+                ).total_seconds()
+
+                # Limit write volume, and de-herd, in case we're getting many
+                # concurrent updates for the same calendar.
+                if time_since_last_ping < 10 + random.randrange(0, 10):
+                    return resp(200)
+
             calendar.handle_gpush_notification()
             db_session.commit()
         return resp(200)

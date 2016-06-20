@@ -22,7 +22,7 @@ def format_address_list(addresses):
 def format_categories(categories):
     if categories is None:
         return []
-    return [{'id': category.public_id, 'name': category.name,
+    return [{'id': category.public_id, 'name': category.name or None,
              'display_name': category.api_display_name} for category in
             categories]
 
@@ -37,22 +37,24 @@ def format_phone_numbers(phone_numbers):
     return formatted_phone_numbers
 
 
-def encode(obj, namespace_public_id=None, expand=False):
+def encode(obj, namespace_public_id=None, expand=False, is_n1=False):
     try:
-        return _encode(obj, namespace_public_id, expand)
+        return _encode(obj, namespace_public_id, expand, is_n1=is_n1)
     except Exception as e:
         error_context = {
             "id": getattr(obj, "id", None),
             "cls": str(getattr(obj, "__class__", None)),
-            "exception": e
+            "exception": e,
+            "exc_info": True
         }
+
         log.error("object encoding failure", **error_context)
         raise
 
 
-def _encode(obj, namespace_public_id=None, expand=False):
+def _encode(obj, namespace_public_id=None, expand=False, is_n1=False):
     """
-    Returns a dictionary representation of an Inbox model object obj, or
+    Returns a dictionary representation of a Nylas model object obj, or
     None if there is no such representation defined. If the optional
     namespace_public_id parameter is passed, it will used instead of fetching
     the namespace public id for each object. This improves performance when
@@ -97,7 +99,14 @@ def _encode(obj, namespace_public_id=None, expand=False):
         return encode(obj.datetime)
 
     if isinstance(obj, Namespace):  # These are now "accounts"
-        return {
+        acc_state = obj.account.sync_state
+        if acc_state is None:
+            acc_state = 'running'
+
+        if is_n1 and acc_state not in ['running', 'invalid']:
+            acc_state = 'running'
+
+        resp = {
             'id': obj.public_id,
             'object': 'account',
             'account_id': obj.public_id,
@@ -105,8 +114,13 @@ def _encode(obj, namespace_public_id=None, expand=False):
             'name': obj.account.name,
             'provider': obj.account.provider,
             'organization_unit': obj.account.category_type,
-            'sync_state': obj.account.sync_state
+            'sync_state': acc_state
         }
+
+        # Gmail accounts do not set the `server_settings`
+        if expand and obj.account.server_settings:
+            resp['server_settings'] = obj.account.server_settings
+        return resp
 
     elif isinstance(obj, Account):
         raise Exception("Should never be serializing accounts")
@@ -138,7 +152,7 @@ def _encode(obj, namespace_public_id=None, expand=False):
         else:
             resp['labels'] = categories
 
-        # If the message is a draft (Inbox-created or otherwise):
+        # If the message is a draft (Nylas-created or otherwise):
         if obj.is_draft:
             resp['object'] = 'draft'
             resp['version'] = obj.version
@@ -164,7 +178,8 @@ def _encode(obj, namespace_public_id=None, expand=False):
             'subject': obj.subject,
             'participants': format_address_list(obj.participants),
             'last_message_timestamp': obj.recentdate,
-            'last_message_received_timestamp': obj.receivedrecentdate,
+            'last_message_received_timestamp': obj.most_recent_received_date,
+            'last_message_sent_timestamp': obj.most_recent_sent_date,
             'first_message_timestamp': obj.subjectdate,
             'snippet': obj.snippet,
             'unread': obj.unread,
@@ -322,7 +337,7 @@ def _encode(obj, namespace_public_id=None, expand=False):
             'id': obj.public_id,
             'object': obj.type,
             'account_id': _get_namespace_public_id(obj),
-            'name': obj.name,
+            'name': obj.name or None,
             'display_name': obj.api_display_name
         }
         return resp
@@ -342,7 +357,7 @@ def _encode(obj, namespace_public_id=None, expand=False):
 
 class APIEncoder(object):
     """
-    Provides methods for serializing Inbox objects. If the optional
+    Provides methods for serializing Nylas objects. If the optional
     namespace_public_id parameter is passed, it will be bound and used instead
     of fetching the namespace public id for each object. This improves
     performance when serializing large numbers of objects, but also means that
@@ -355,16 +370,16 @@ class APIEncoder(object):
         public id of the namespace to which the object to serialize belongs.
 
     """
-    def __init__(self, namespace_public_id=None, expand=False):
-        self.encoder_class = self._encoder_factory(namespace_public_id, expand)
+    def __init__(self, namespace_public_id=None, expand=False, is_n1=False):
+        self.encoder_class = self._encoder_factory(namespace_public_id, expand, is_n1=is_n1)
 
-    def _encoder_factory(self, namespace_public_id, expand):
+    def _encoder_factory(self, namespace_public_id, expand, is_n1=False):
         class InternalEncoder(JSONEncoder):
 
             def default(self, obj):
                 custom_representation = encode(obj,
                                                namespace_public_id,
-                                               expand=expand)
+                                               expand=expand, is_n1=is_n1)
                 if custom_representation is not None:
                     return custom_representation
                 # Let the base class default method raise the TypeError

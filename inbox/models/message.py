@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-import re
 import binascii
 import datetime
 import itertools
@@ -23,10 +21,13 @@ from inbox.util.addr import parse_mimepart_address_header
 from inbox.util.misc import parse_references, get_internaldate
 from inbox.util.blockstore import save_to_blockstore
 from inbox.security.blobstorage import encode_blob, decode_blob
-from inbox.models.mixins import HasPublicID, HasRevisions
+from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
+                                 DeletedAtMixin)
 from inbox.models.base import MailSyncBase
 from inbox.models.namespace import Namespace
 from inbox.models.category import Category
+
+from inbox.sqlalchemy_ext.util import MAX_MYSQL_INTEGER
 
 
 def _trim_filename(s, namespace_id, max_len=64):
@@ -38,7 +39,8 @@ def _trim_filename(s, namespace_id, max_len=64):
     return s
 
 
-class Message(MailSyncBase, HasRevisions, HasPublicID):
+class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
+              DeletedAtMixin):
 
     @property
     def API_OBJECT_NAME(self):
@@ -77,13 +79,24 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
     is_read = Column(Boolean, server_default=false(), nullable=False)
     is_starred = Column(Boolean, server_default=false(), nullable=False)
 
-    # For drafts (both Inbox-created and otherwise)
+    # For drafts (both Nylas-created and otherwise)
     is_draft = Column(Boolean, server_default=false(), nullable=False)
     is_sent = Column(Boolean, server_default=false(), nullable=False)
 
     # REPURPOSED
     state = Column(Enum('draft', 'sending', 'sending failed', 'sent',
                         'actions_pending', 'actions_committed'))
+
+    @property
+    def is_sending(self):
+        return self.version == MAX_MYSQL_INTEGER and not self.is_draft
+
+    def mark_as_sending(self):
+        if self.is_sent:
+            raise ValueError('Cannot mark a sent message as sending')
+        self.version = MAX_MYSQL_INTEGER
+        self.is_draft = False
+        self.regenerate_inbox_uid()
 
     @property
     def categories_changes(self):
@@ -295,7 +308,13 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
             get_internaldate(parsed.headers.get('Date'),
                              parsed.headers.get('Received'))
 
-        # Custom Inbox header
+        # It seems MySQL rounds up fractional seconds in a weird way,
+        # preventing us from reconciling messages correctly. See:
+        # https://github.com/nylas/sync-engine/commit/ed16b406e0a for
+        # more details.
+        self.received_date = self.received_date.replace(microsecond=0)
+
+        # Custom Nylas header
         self.inbox_uid = parsed.headers.get('X-INBOX-ID')
 
         # In accordance with JWZ (http://www.jwz.org/doc/threading.html)
@@ -418,51 +437,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
         return self.calculate_plaintext_snippet(text)
 
     def calculate_plaintext_snippet(self, text):
-        # Translation for key words in...
-        # English, Spanish, German, French, Portuguese, Dutch
-        # (in that order)
-        regexes = [ur"On\s.*?\s\d{1,2}\:\d{1,2}.*?wrote:?",
-                   ur"El\s.*?\s\d{1,2}\:\d{1,2}.*?escribió:?",
-                   ur"Am\s.*?\s\d{1,2}\:\d{1,2}.*?schrieb:?",
-                   ur"Le\s.*?\s\d{1,2}\:\d{1,2}.*?écrit:?",
-                   ur"No\s.*?\s\d{1,2}\:\d{1,2}.*?escreve:?",
-                   ur"Op\s.*?\s\d{1,2}\:\d{1,2}.*?schreef:?",
-                   ur"Date:\s.*?\s+\d{1,2}:\d{1,2}.*?From:?"]
-
-        compiled = [re.compile(regex, re.UNICODE) for regex in regexes]
-
-        # go through all of the snippets, and take off anything after a match
-        # note that this is done incrementally (i.e. the output is fed as input
-        # to the next c.split) so that if multiple regexes match, we throw away
-        # as much as possible and the order of the regexes doesn't matter
-
-        snippet = text
-        for c in compiled:
-            snippet = c.split(snippet)[0]
-
-        # for example, if we get this message:
-
-        # Blah
-        #
-        # On 10:10, 2016, Someone wrote:
-        #
-        # More blah
-        #
-        # Am 10:10, 2015, Someone Else schrieb:
-        #
-        # Even more blah
-
-        # then if we simply applied whichever regex matched we would either
-        #   A) correctly process it, or
-        #   B) only remove the second reply (Am... schrieb)
-        # depending on what order the regexes are in when we loop through them.
-
-        snippet = ' '.join(snippet.split())[:self.SNIPPET_LENGTH]
-        if not snippet:
-            # if there was no content in the body, fall back to the
-            # "full" snippet
-            snippet = ' '.join(text.split())[:self.SNIPPET_LENGTH]
-        return snippet
+        return ' '.join(text.split())[:self.SNIPPET_LENGTH]
 
     @property
     def body(self):

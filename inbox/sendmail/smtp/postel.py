@@ -18,6 +18,7 @@ from inbox.sendmail.message import create_email
 from inbox.basicauth import OAuthError
 from inbox.providers import provider_info
 from inbox.util.blockstore import get_from_blockstore
+from util import SMTP_ERRORS
 
 # TODO[k]: Other types (LOGIN, XOAUTH, PLAIN-CLIENTTOKEN, CRAM-MD5)
 AUTH_EXTNS = {'oauth2': 'XOAUTH2',
@@ -110,10 +111,21 @@ def _transform_ssl_error(strerror):
     _ssl.c:510: error:14090086:SSL routines:SSL3_GET_SERVER_CERTIFICATE:certificate verify failed  # noqa
 
     """
-    if strerror.endswith('certificate verify failed'):
+    if strerror is None:
+        return 'Unknown connection error'
+    elif strerror.endswith('certificate verify failed'):
         return 'SMTP server SSL certificate verify failed'
     else:
         return strerror
+
+
+def _substitute_bcc(raw_message):
+    """
+    Substitute BCC in raw message.
+    """
+    bcc_regexp = re.compile(r'^Bcc: [^\r\n]*\r\n',
+                            re.IGNORECASE | re.MULTILINE)
+    return bcc_regexp.sub('', raw_message)
 
 
 class SMTPConnection(object):
@@ -148,6 +160,8 @@ class SMTPConnection(object):
             self.connection.connect(host, port)
         except socket.error as e:
             # 'Connection refused', SSL errors for non-TLS connections, etc.
+            log.error('SMTP connection error', exc_info=True,
+                      server_error=e.strerror)
             msg = _transform_ssl_error(e.strerror)
             raise SendMailException(msg, 503)
 
@@ -175,7 +189,8 @@ class SMTPConnection(object):
         """
         # If STARTTLS is available, always use it -- irrespective of the
         # `self.ssl_required`. If it's not or it fails, use `self.ssl_required`
-        # to determine whether to fail or continue with plaintext authentication.
+        # to determine whether to fail or continue with plaintext
+        # authentication.
         self.connection.ehlo()
         if self.connection.has_extn('starttls'):
             try:
@@ -286,8 +301,7 @@ class SMTPClient(object):
         self.provider_name = account.provider
         self.sender_name = account.name
         self.smtp_endpoint = account.smtp_endpoint
-        self.auth_type = provider_info(self.provider_name,
-                                       self.email_address)['auth']
+        self.auth_type = provider_info(self.provider_name)['auth']
 
         if self.auth_type == 'oauth2':
             try:
@@ -353,22 +367,23 @@ class SMTPClient(object):
             # Distinguish between permanent failures due to message
             # content or recipients, and temporary failures for other reasons.
             # In particular, see https://support.google.com/a/answer/3726730
-            if err.smtp_code == 550 and err.smtp_error.startswith('5.4.5'):
-                message = 'Daily sending quota exceeded'
-                http_code = 429
-            elif (err.smtp_code == 552 and
-                  (err.smtp_error.startswith('5.2.3') or
-                   err.smtp_error.startswith('5.3.4'))):
-                message = 'Message too large'
-                http_code = 402
-            elif err.smtp_code == 552 and err.smtp_error.startswith('5.7.0'):
-                message = 'Message content rejected for security reasons'
-                http_code = 402
-            else:
-                message = 'Sending failed'
-                http_code = 503
+
+            message = 'Sending failed'
+            http_code = 503
+
+            if err.smtp_code in SMTP_ERRORS:
+                for stem in SMTP_ERRORS[err.smtp_code]:
+                    if stem in err.smtp_error:
+                        res = SMTP_ERRORS[err.smtp_code][stem]
+                        http_code = res[0]
+                        message = res[1]
+                        break
 
             server_error = '{} : {}'.format(err.smtp_code, err.smtp_error)
+
+            self.log.error('Sending failed', message=message,
+                           http_code=http_code, server_error=server_error)
+
             raise SendMailException(message, http_code=http_code,
                                     server_error=server_error)
         else:
@@ -379,6 +394,44 @@ class SMTPClient(object):
         # A tiny wrapper over _send because the API differs
         # between SMTP and EAS.
         return self._send(recipients, raw_message)
+
+    def send_custom(self, draft, body, recipients):
+        """
+        Turn a draft object into a MIME message, replacing the body with
+        the provided body, and send it only to the provided recipients.
+
+        Parameters
+        ----------
+        draft: models.message.Message object
+            the draft message to send.
+        body: string
+            message body to send in place of the existing body attribute in
+            the draft.
+        recipient_emails: email addresses to send copies of this message to.
+        """
+        blocks = [p.block for p in draft.attachments]
+        attachments = generate_attachments(blocks)
+        from_addr = draft.from_addr[0]
+        msg = create_email(from_name=from_addr[0],
+                           from_email=from_addr[1],
+                           reply_to=draft.reply_to,
+                           inbox_uid=draft.inbox_uid,
+                           to_addr=draft.to_addr,
+                           cc_addr=draft.cc_addr,
+                           bcc_addr=None,
+                           subject=draft.subject,
+                           html=body,
+                           in_reply_to=draft.in_reply_to,
+                           references=draft.references,
+                           attachments=attachments)
+
+        recipient_emails = [email for name, email in recipients]
+
+        self._send(recipient_emails, msg)
+
+        # Sent successfully
+        self.log.info('Sending successful', sender=from_addr[1],
+                      recipients=recipient_emails)
 
     def send(self, draft):
         """
@@ -437,7 +490,7 @@ class SMTPClient(object):
             msg.bcc_addr, msg.cc_addr, msg.to_addr)]
 
         raw_message = get_from_blockstore(msg.data_sha256)
-        mime_body = re.sub(r'Bcc: [^\r\n]*\r\n', '', raw_message)
+        mime_body = _substitute_bcc(raw_message)
         self._send(recipient_emails, mime_body)
 
         # Sent to all successfully

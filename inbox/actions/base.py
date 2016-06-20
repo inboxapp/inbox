@@ -1,6 +1,6 @@
-""" Code for propagating Inbox datastore changes to account backends.
+""" Code for propagating Nylas datastore changes to account backends.
 
-Syncback actions don't update anything in the local datastore; the Inbox
+Syncback actions don't update anything in the local datastore; the Nylas
 datastore is updated asynchronously (see namespace.py) and bookkeeping about
 the account backend state is updated when the changes show up in the mail sync
 engine.
@@ -31,7 +31,8 @@ from inbox.actions.backends.generic import (set_remote_unread,
                                             remote_save_sent,
                                             remote_create_folder,
                                             remote_update_folder,
-                                            remote_delete_folder)
+                                            remote_delete_folder,
+                                            remote_delete_sent)
 from inbox.actions.backends.gmail import (remote_change_labels,
                                           remote_create_label,
                                           remote_update_label,
@@ -152,3 +153,12 @@ def save_sent_email(account_id, message_id):
     us to create a copy of the message in the sent folder.
     """
     remote_save_sent(account_id, message_id)
+
+
+def delete_sent_email(account_id, message_id, args):
+    """
+    Delete an email on the remote backend, in the sent folder.
+    """
+    message_id_header = args.get('message_id_header')
+    assert message_id_header, 'Need the message_id_header'
+    remote_delete_sent(account_id, message_id_header)

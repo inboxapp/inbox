@@ -205,7 +205,8 @@ class CrispinConnectionPool(object):
                     self.account_id)
             else:
                 account = db_session.query(GenericAccount).options(
-                    joinedload(GenericAccount.imap_secret)).get(self.account_id)
+                    joinedload(GenericAccount.imap_secret)
+                ).get(self.account_id)
             db_session.expunge(account)
 
         return self.auth_handler.connect_account(account)
@@ -348,11 +349,24 @@ class CrispinClient(object):
         return or_none(self.selected_folder_info, lambda i: i.get('UIDNEXT'))
 
     @property
-    def folder_delimiter(self):
-        folders = self._fetch_folder_list()
-        _, delimiter, __ = folders[0]
+    def folder_separator(self):
+        # We use the list command because it works for most accounts.
+        folders_list = self.conn.list_folders()
 
-        return delimiter
+        if len(folders_list) == 0:
+            return '.'
+
+        return folders_list[0][1]
+
+    @property
+    def folder_prefix(self):
+        # Unfortunately, some servers don't support the NAMESPACE command.
+        # In this case, assume that there's no folder prefix.
+        if self.conn.has_capability('NAMESPACE'):
+            folder_prefix, folder_separator = self.conn.namespace()[0][0]
+            return folder_prefix
+        else:
+            return ''
 
     def sync_folders(self):
         """
@@ -458,6 +472,7 @@ class CrispinClient(object):
             'spam': 'spam',
             'archive': 'archive',
             'sent': 'sent',
+            'sent items': 'sent',
             'trash': 'trash'}
 
         # Additionally we provide a custom mapping for providers that
@@ -665,6 +680,24 @@ class CrispinClient(object):
 
         return results
 
+    def delete_sent_message(self, message_id_header):
+        """
+        Delete a message in the sent folder, as identified by the Message-Id
+        header. We first delete the message from the Sent folder, and then
+        also delete it from the Trash folder if necessary.
+
+        """
+        log.info('Trying to delete sent message',
+                 message_id_header=message_id_header)
+        sent_folder_name = self.folder_names()['sent'][0]
+        self.conn.select_folder(sent_folder_name)
+        msg_deleted = self._delete_message(message_id_header)
+        if msg_deleted:
+            trash_folder_name = self.folder_names()['trash'][0]
+            self.conn.select_folder(trash_folder_name)
+            self._delete_message(message_id_header)
+        return msg_deleted
+
     def delete_draft(self, message_id_header):
         """
         Delete a draft, as identified by its Message-Id header. We first delete
@@ -722,7 +755,8 @@ class CrispinClient(object):
     def condstore_changed_flags(self, modseq):
         data = self.conn.fetch('1:*', ['FLAGS'],
                                modifiers=['CHANGEDSINCE {}'.format(modseq)])
-        return {uid: Flags(ret['FLAGS'], ret['MODSEQ'][0] if 'MODSEQ' in ret else None)
+        return {uid: Flags(ret['FLAGS'], ret['MODSEQ'][0]
+                if 'MODSEQ' in ret else None)
                 for uid, ret in data.items()}
 
 
@@ -747,11 +781,11 @@ class GmailCrispinClient(CrispinClient):
 
         if 'all' not in present_folders:
             raise GmailSettingError(
-                "Account {} ({}) is missing the 'All Mail' folder. This is "
+                "Account {} is missing the 'All Mail' folder. This is "
                 "probably due to 'Show in IMAP' being disabled. "
-                "Please enable at "
-                "https://mail.google.com/mail/#settings/labels"
-                .format(self.account_id, self.email_address))
+                "See https://support.nylas.com/hc/en-us/articles/217562277 "
+                "for more details."
+                .format(self.email_address))
 
         # If the account has Trash, Spam folders, sync those too.
         to_sync = []
@@ -962,3 +996,33 @@ class GmailCrispinClient(CrispinClient):
 
     def _decode_labels(self, labels):
         return map(imapclient.imap_utf7.decode, labels)
+
+    def delete_sent_message(self, message_id_header):
+        """
+        Delete a message in the sent folder, as identified by the Message-Id
+        header. This overrides the parent class's method because gmail has
+        weird delete semantics: to delete a message from a "folder" (actually a
+        label) besides Trash or Spam, you must copy it to the trash. Issuing a
+        delete command will only remove the label. So here we first copy the
+        message from the Sent folder to Trash, and then also delete it from the
+        Trash folder to permanently delete it.
+        """
+        log.info('Trying to delete sent message',
+                 message_id_header=message_id_header)
+        sent_folder_name = self.folder_names()['sent'][0]
+        trash_folder_name = self.folder_names()['trash'][0]
+        # First find the message in Sent
+        self.conn.select_folder(sent_folder_name)
+        matching_uids = self.find_by_header('Message-Id', message_id_header)
+        if not matching_uids:
+            return False
+
+        # To delete, first copy the message to trash (sufficient to move from
+        # gmail's All Mail folder to Trash folder)
+        self.conn.copy(matching_uids, trash_folder_name)
+
+        # Next, select delete the message from trash (in the normal way) to
+        # permanently delete it.
+        self.conn.select_folder(trash_folder_name)
+        self._delete_message(message_id_header)
+        return True

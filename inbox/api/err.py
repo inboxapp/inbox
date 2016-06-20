@@ -1,4 +1,6 @@
 from flask import jsonify, make_response
+from nylas.logging import get_logger
+log = get_logger()
 
 
 class APIException(Exception):
@@ -12,6 +14,7 @@ class InputError(APIException):
 
     def __init__(self, message):
         self.message = message
+        super(InputError, self).__init__(message)
 
 
 class NotFoundError(APIException):
@@ -20,6 +23,7 @@ class NotFoundError(APIException):
 
     def __init__(self, message):
         self.message = message
+        super(NotFoundError, self).__init__(message)
 
 
 class ConflictError(APIException):
@@ -27,18 +31,34 @@ class ConflictError(APIException):
 
     def __init__(self, message):
         self.message = message
+        super(ConflictError, self).__init__(message)
 
 
-class ActionError(APIException):
-    """Raised when an account's credentials aren't valid. (We don't accept
-    actions if they can't be synced back."""
+class AccountInvalidError(APIException):
+    """ Raised when an account's credentials are not valid. """
     status_code = 403
     message = "This action can't be performed because the account's " \
               "credentials are out of date. Please reauthenticate and try " \
               "again."
 
 
+class AccountStoppedError(APIException):
+    """ Raised when an account has been stopped. """
+    status_code = 403
+    message = "This action can't be performed because the account's sync " \
+              "has been stopped. Please contact support@nylas.com to resume " \
+              "sync."
+
+
+class AccountDoesNotExistError(APIException):
+    """ Raised when an account does not exist (for example, if it was deleted). """
+    status_code = 404
+    message = "The account does not exist."
+
+
 def err(http_code, message, **kwargs):
+    log.info('Returning API error to client',
+             http_code=http_code, message=message, kwargs=kwargs)
     resp = {
         'type': 'api_error',
         'message': message

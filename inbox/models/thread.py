@@ -7,15 +7,15 @@ from sqlalchemy.orm import (relationship, backref, validates, object_session,
 
 from nylas.logging import get_logger
 log = get_logger()
-from inbox.models.mixins import HasPublicID, HasRevisions
+from inbox.models.mixins import HasPublicID, HasRevisions, UpdatedAtMixin
 from inbox.models.base import MailSyncBase
 from inbox.models.namespace import Namespace
 from inbox.util.misc import cleanup_subject
 
 
-class Thread(MailSyncBase, HasPublicID, HasRevisions):
+class Thread(MailSyncBase, HasPublicID, HasRevisions, UpdatedAtMixin):
     """
-    Threads are a first-class object in Inbox. This thread aggregates
+    Threads are a first-class object in Nylas. This thread aggregates
     the relevant thread metadata from elsewhere so that clients can only
     query on threads.
 
@@ -66,7 +66,7 @@ class Thread(MailSyncBase, HasPublicID, HasRevisions):
             return message
 
     @property
-    def receivedrecentdate(self):
+    def most_recent_received_date(self):
         received_recent_date = None
         for m in self.messages:
             if all(category.name != "sent" for category in m.categories) and \
@@ -85,6 +85,21 @@ class Thread(MailSyncBase, HasPublicID, HasRevisions):
             received_recent_date = sorted_messages[-1].received_date
 
         return received_recent_date
+
+    @property
+    def most_recent_sent_date(self):
+        """ This is the timestamp of the most recently *sent* message on this
+            thread, as decided by whether the message is in the sent folder or
+            not. Clients can use this to properly sort the Sent view.
+            """
+        sent_recent_date = None
+        sorted_messages = sorted(self.messages,
+                                 key=lambda m: m.received_date, reverse=True)
+        for m in sorted_messages:
+            if "sent" in [c.name for c in m.categories] or \
+                    (m.is_draft and m.is_sent):
+                sent_recent_date = m.received_date
+                return sent_recent_date
 
     @property
     def unread(self):
@@ -170,11 +185,6 @@ class Thread(MailSyncBase, HasPublicID, HasRevisions):
     discriminator = Column('type', String(16))
     __mapper_args__ = {'polymorphic_on': discriminator}
 
-# The /threads API endpoint filters on namespace_id and deleted_at, then orders
-# by recentdate; add an explicit index to persuade MySQL to do this in a
-# somewhat performant manner.
-Index('ix_thread_namespace_id_recentdate_deleted_at',
-      Thread.namespace_id, Thread.recentdate, Thread.deleted_at)
 # Need to explicitly specify the index length for MySQL 5.6, because the
 # subject column is too long to be fully indexed with utf8mb4 collation.
 Index('ix_thread_subject', Thread.subject, mysql_length=191)

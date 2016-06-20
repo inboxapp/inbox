@@ -23,11 +23,10 @@ setup(
         "mysqlclient==1.3.7",
         "setproctitle>=1.1.8",
         "pymongo>=2.5.2",
-        "python-dateutil>=2.4",
+        "python-dateutil==2.4.2",
         "ipython>=1.0.0",
         "enum34==1.0.4",
         "gdata>=2.0.18",
-        "simplejson>=3.6.0",
         "icalendar>=3.8.2",
         "simplejson>=3.6.0",
         "Flask>=0.10.1",
@@ -40,14 +39,15 @@ setup(
         "lxml>=3.4.2",
         "arrow==0.5.4",
         "statsd>=3.1",
-        "boto3>=1.1.4",
+        "boto3==1.1.4",
         "Pympler==0.4.2",
         "pyopenssl>=0.15.1",
         "gevent_openssl==1.2",
         "backports.ssl>=0.0.9",
         "imapclient==1.0.1",
+        "tldextract==1.7.5",
     ],
-    dependency_links=[],
+    dependency_links=["git+https://github.com/nylas/dateutil.git@da336a366cd3#egg=python-dateutil-2.4.2"],
 
     include_package_data=True,
     package_data={
@@ -66,10 +66,7 @@ setup(
 
     scripts=['bin/inbox-start',
              'bin/inbox-console',
-             'bin/migrate-account',
-             'bin/migrate-account-bulk',
              'bin/summary-stats',
-             'bin/start-stop-account',
              'bin/inbox-auth',
              'bin/delete-account-data',
              'bin/create-db',
@@ -85,31 +82,23 @@ setup(
              'bin/contact-search-service',
              'bin/contact-search-backfill',
              'bin/contact-search-delete-index',
-             'bin/update-sync-host-format',
              'bin/populate-sync-queue',
-             'bin/backpopulate-sync-assignments',
              'bin/delete-marked-accounts',
-             'bin/detect-utf7-folders',
-             'bin/backfix-utf7-folders',
-             'bin/populate-imap-smtp-credentials'
+             'bin/backfix-generic-imap-separators.py',
+             'bin/backfix-duplicate-categories.py',
+             'bin/correct-autoincrements',
+             'bin/update-categories',
+             'bin/detect-missing-sync-host',
+             'bin/purge-transaction-log',
+             'bin/mysql-prompt',
+             'bin/toggle-s3-sync',
+             'bin/unschedule-account-syncs',
+             'bin/syncback-stats'
              ],
 
     # See:
     # https://pythonhosted.org/setuptools/setuptools.html#dynamic-discovery-of-services-and-plugins
     # https://pythonhosted.org/setuptools/pkg_resources.html#entry-points
-    entry_points={
-        # See https://pythonhosted.org/setuptools/setuptools.html#automatic-script-creation # noqa
-        # 'console_scripts': [
-        #     'inbox-consistency-check = inbox.util.consistency_check.__main__:main',  # noqa
-        # ],
-
-        # See inbox/util/consistency_check/__main__.py
-        'inbox.consistency_check_plugins': [
-            'list=inbox.util.consistency_check.list:ListPlugin',
-            'imap_gm=inbox.util.consistency_check.imap_gm:ImapGmailPlugin',
-            'local_gm=inbox.util.consistency_check.local_gm:LocalGmailPlugin',
-        ],
-    },
     zip_safe=False,
     author="Nylas Team",
     author_email="team@nylas.com",

@@ -45,7 +45,7 @@ def engine(database_name, database_uri, pool_size=DB_POOL_SIZE,
     engine = create_engine(database_uri,
                            listeners=[ForceStrictMode()],
                            isolation_level='READ COMMITTED',
-                           echo=echo,
+                           echo=False,
                            pool_size=pool_size,
                            pool_timeout=pool_timeout,
                            pool_recycle=3600,
@@ -175,6 +175,11 @@ def verify_db(engine, schema, key):
 
     verified = set()
     for table in MailSyncBase.metadata.sorted_tables:
+        # ContactSearchIndexCursor does not need to be checked because there's
+        # only one row in the table
+        if str(table) == 'contactsearchindexcursor':
+            continue
+
         increment = engine.execute(query.format(schema, table)).scalar()
         if increment is not None:
             assert (increment >> 48) == key, \
@@ -193,3 +198,22 @@ def verify_db(engine, schema, key):
             parent = list(table.columns['id'].foreign_keys)[0].column.table
             assert parent in verified
         verified.add(table)
+
+
+def reset_invalid_autoincrements(engine, schema, key, dry_run=True):
+    from inbox.models.base import MailSyncBase
+
+    query = """SELECT AUTO_INCREMENT from information_schema.TABLES where
+    table_schema='{}' AND table_name='{}';"""
+
+    reset = set()
+    for table in MailSyncBase.metadata.sorted_tables:
+        increment = engine.execute(query.format(schema, table)).scalar()
+        if increment is not None:
+            if (increment >> 48) != key:
+                if not dry_run:
+                    reset_query = "ALTER TABLE {} AUTO_INCREMENT={}". \
+                        format(table, (key << 48) + 1)
+                    engine.execute(reset_query)
+                reset.add(str(table))
+    return reset
