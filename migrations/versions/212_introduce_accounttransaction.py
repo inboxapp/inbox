@@ -7,15 +7,15 @@ Create Date: 2016-01-29 22:31:12.638080
 """
 
 # revision identifiers, used by Alembic.
-revision = '4b83e064dead'
-down_revision = 'bc1119471fe'
+revision = '4b83e064dd49'
+down_revision = '31aae1ecb374'
 
 from alembic import op, context
 import sqlalchemy as sa
 
 
 def upgrade():
-    shard_id = int(context.config.get_main_option('shard_id'))
+    shard_id = int(context.get_x_argument(as_dictionary=True).get('shard_id'))
     namespace_id_type = sa.Integer() if shard_id == 0 else sa.BigInteger()
 
     op.create_table('accounttransaction',

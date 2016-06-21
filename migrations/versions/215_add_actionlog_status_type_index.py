@@ -1,14 +1,14 @@
 """add actionlog (status, type) index
 
 Revision ID: 4bfecbcc7dbd
-Revises: 4b83e064dd49
+Revises:bc1119471fe
 Create Date: 2016-02-11 16:49:20.765262
 
 """
 
 # revision identifiers, used by Alembic.
 revision = '4bfecbcc7dbd'
-down_revision = '4b83e064dd49'
+down_revision = '4b83e064dead'
 
 from alembic import op
 

@@ -41,6 +41,7 @@ def upgrade():
         # Run EAS specific migrations
         conn.execute(text("ALTER TABLE easdevice"
                           " MODIFY COLUMN updated_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'"))
+
         conn.execute(text("ALTER TABLE easdevice DROP deleted_at,"
                           "DROP updated_at"))
 
@@ -60,6 +61,7 @@ def downgrade():
                   nullable=True))
     op.create_index('ix_thread_deleted_at', 'thread', ['deleted_at'],
                     unique=False)
+
     op.create_index('ix_thread_namespace_id_recentdate_deleted_at', 'thread',
                     ['namespace_id', 'recentdate', 'deleted_at'], unique=False)
 
@@ -91,4 +93,3 @@ def downgrade():
         op.add_column('easdevice', sa.Column('deleted_at', mysql.DATETIME(), nullable=True))
         op.create_index('ix_easdevice_updated_at', 'easdevice', ['updated_at'], unique=False)
         op.create_index('ix_easdevice_deleted_at', 'easdevice', ['deleted_at'], unique=False)
-

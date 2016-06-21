@@ -1,14 +1,14 @@
 """Add columns for smtp/imap-specific auth
 
 Revision ID: 501f6b2fef28
-Revises: 31aae1ecb374
+Revises: 4b83e064dd49
 Create Date: 2016-01-29 00:27:08.174534
 
 """
 
 # revision identifiers, used by Alembic.
 revision = '501f6b2fef28'
-down_revision = '31aae1ecb374'
+down_revision = '4b83e064dd49'
 
 from alembic import op, context
 from sqlalchemy.sql import text

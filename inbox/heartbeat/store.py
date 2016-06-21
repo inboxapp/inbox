@@ -1,6 +1,4 @@
 import time
-import itertools
-from inbox.util.itert import chunk
 
 from nylas.logging import get_logger
 log = get_logger()
@@ -108,10 +106,10 @@ class HeartbeatStore(object):
         # Update indexes
         self.update_folder_index(key, float(timestamp))
 
-    def remove(self, key, device_id=None):
+    def remove(self, key, device_id=None, client=None):
         # Remove a key from the store, or device entry from a key.
-        client = heartbeat_config.get_redis_client(key.account_id)
-
+        if not client:
+            client = heartbeat_config.get_redis_client(self.host, self.port)
         if device_id:
             client.hdel(key, device_id)
             # If that was the only entry, also remove from folder index.
@@ -135,7 +133,7 @@ class HeartbeatStore(object):
             # Remove all folder timestamps and account-level indices
             match = HeartbeatStatusKey.all_folders(account_id)
 
-            client = heartbeat_config.get_redis_client(account_id)
+            client = heartbeat_config.get_redis_client(self.host, self.port)
             pipeline = client.pipeline()
             n = 0
             for key in client.scan_iter(match, 100):
@@ -150,13 +148,13 @@ class HeartbeatStore(object):
     def update_folder_index(self, key, timestamp):
         assert isinstance(timestamp, float)
         # Update the folder timestamp index for this specific account, too
-        client = heartbeat_config.get_redis_client(key.account_id)
+        client = heartbeat_config.get_redis_client(self.host, self.port)
         client.zadd(key.account_id, timestamp, key.folder_id)
 
     def update_accounts_index(self, key):
         # Find the oldest heartbeat from the account-folder index
         try:
-            client = heartbeat_config.get_redis_client(key.account_id)
+            client = heartbeat_config.get_redis_client(self.host, self.port)
             f, oldest_heartbeat = client.zrange(key.account_id, 0, 0,
                                                 withscores=True).pop()
             client.zadd('account_index', oldest_heartbeat, key.account_id)
@@ -175,44 +173,19 @@ class HeartbeatStore(object):
         client.delete(account_id)
         client.zrem('account_index', account_id)
 
+    def get_index(self, index):
+        # Get all elements in the specified index.
+        client = heartbeat_config.get_redis_client(self.host, self.port)
+        return client.zrange(index, 0, -1, withscores=True)
+
     def get_account_folders(self, account_id):
-        client = heartbeat_config.get_redis_client(account_id)
-        return client.zrange(account_id, 0, -1, withscores=True)
+        return self.get_index(account_id)
 
     def get_accounts_folders(self, account_ids):
-        # This is where things get interesting --- we need to make queries
-        # to multiple shards and return the results to a single caller.
         # Preferred method of querying for multiple accounts. Uses pipelining
         # to reduce the number of requests to redis.
-        account_ids_grouped_by_shards = []
-
-        # A magic one-liner to group account ids by shard.
-        # http://stackoverflow.com/questions/8793772/how-to-split-a-sequence-according-to-a-predicate
-        shard_num = heartbeat_config.account_redis_shard_number
-        account_ids_grouped_by_shards = [list(v[1]) for v in
-                                         itertools.groupby(
-                                            sorted(account_ids, key=shard_num),
-                                            key=shard_num)]
-
-        results = dict()
-        for account_group in account_ids_grouped_by_shards:
-            if not account_group:
-                continue
-
-            client = heartbeat_config.get_redis_client(account_group[0])
-
-            # Because of the way pipelining works, redis buffers data.
-            # We break our requests in chunk to not have to ask for
-            # impossibly big numbers.
-            for chnk in chunk(account_group, 10000):
-                pipe = client.pipeline()
-                for index in chnk:
-                    pipe.zrange(index, 0, -1, withscores=True)
-
-                pipe_results = pipe.execute()
-
-                for i, account_id in enumerate(chnk):
-                    account_id = int(account_id)
-                    results[account_id] = pipe_results[i]
-
-        return results
+        client = heartbeat_config.get_redis_client(self.host, self.port)
+        pipe = client.pipeline()
+        for index in account_ids:
+            pipe.zrange(index, 0, -1, withscores=True)
+        return pipe.execute()

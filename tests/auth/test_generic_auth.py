@@ -234,6 +234,15 @@ def test_double_auth(db):
     assert account.smtp_password == password
 
 
+def generate_endpoint_updates(settings):
+    for key in ('imap_server_host', 'smtp_server_host'):
+        attr = '_{}'.format(key)
+        value = 'I.am.Malicious.{}'.format(key)
+        updated_settings = copy.deepcopy(settings)
+        updated_settings['settings'][key] = value
+        yield (attr, value, updated_settings)
+
+
 def test_parent_domain():
     assert parent_domain('x.a.com') == 'a.com'
     assert parent_domain('a.com') == 'a.com'
@@ -277,12 +286,3 @@ def test_successful_reauth_resets_sync_state(db):
     assert account.sync_state == 'running'
     db.session.add(account)
     db.session.commit()
-
-
-def generate_endpoint_updates(settings):
-    for key in ('imap_server_host', 'smtp_server_host'):
-        attr = '_{}'.format(key)
-        value = 'I.am.Malicious.{}'.format(key)
-        updated_settings = copy.deepcopy(settings)
-        updated_settings['settings'][key] = value
-        yield (attr, value, updated_settings)

@@ -1,7 +1,7 @@
 """Add metadata table
 
 Revision ID: bc1119471fe
-Revises: 31aae1ecb374
+Revises:501f6b2fef28
 Create Date: 2016-01-26 06:01:15.339018
 
 """
@@ -10,7 +10,7 @@ Create Date: 2016-01-26 06:01:15.339018
 revision = 'bc1119471fe'
 down_revision = '501f6b2fef28'
 
-from alembic import op, context
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -55,6 +55,7 @@ def upgrade():
     op.create_index('ix_obj_public_id_app_id', 'metadata',
                     ['object_public_id', 'app_id'], unique=True)
 
+    shard_id = int(context.get_x_argument(as_dictionary=True).get('shard_id'))
     conn = op.get_bind()
     increment = (shard_id << 48) + 1
     conn.execute('ALTER TABLE metadata AUTO_INCREMENT={}'.format(increment))
