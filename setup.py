@@ -9,7 +9,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        "gevent>=1.0.1",
+        "gevent>=1.0.2",
         "nylas-production-python>=0.2.0",
         "click>=2.4",
         "cpu_affinity>=0.1.0",
