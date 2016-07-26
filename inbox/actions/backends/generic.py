@@ -188,8 +188,6 @@ def remote_update_draft(account_id, message_id, old_message_id_header):
         account = db_session.query(Account).get(account_id)
         message = db_session.query(Message).get(message_id)
         message_id_header = message.message_id_header
-        message_public_id = message.public_id
-        version = message.version
         mimemsg = _create_email(account, message)
 
     # Steps to updating draft:
@@ -212,13 +210,16 @@ def remote_update_draft(account_id, message_id, old_message_id_header):
                      message_id_header=message_id_header)
 
         # Check for an older version and delete it. (We can stop once we find
-        # one, to reduce the latency of this operation.)
-        old_version_deleted = crispin_client.delete_draft(
-            old_message_id_header)
-        if old_version_deleted:
-            log.info('Cleaned up old draft',
-                     old_message_id_header=old_message_id_header,
-                     message_id_header=message_id_header)
+        # one, to reduce the latency of this operation.). Note that the old
+        # draft does not always have a message id, in which case we can't
+        # replace it.
+        if old_message_id_header:
+            old_version_deleted = crispin_client.delete_draft(
+                old_message_id_header)
+            if old_version_deleted:
+                log.info('Cleaned up old draft',
+                         old_message_id_header=old_message_id_header,
+                         message_id_header=message_id_header)
 
 
 def remote_delete_draft(account_id, inbox_uid, message_id_header):
