@@ -31,6 +31,87 @@ The `inbox-auth` command will walk you through the process of obtaining an autho
 
 The sync engine will automatically begin syncing your account with the underlying provider. The `inbox-sync` command allows you to manually stop or restart the sync by running `inbox-sync stop [YOUR_ACCOUNT]@example.com` or `inbox-sync start [YOUR_ACCOUNT]@example.com`. Note that an initial sync can take quite a while depending on how much mail you have.
 
+### Digital Ocean Installation
+
+To spin up a new Droplet with the sync engine installed on it, you'll need to modify the installation a little bit. The process below was successful in getting a DigitalOcean Ubuntu 14.04 Droplet to spin up a new DigitalOcean Ubuntu 12.04 Droplet.
+
+**System Preparation**:
+
+1. `sudo apt-get install dkms`
+
+2. `sudo apt-get install dpkg-dev`
+
+**Install VirtualBox**:
+
+1. `sudo apt-key add oracle_vbox.asc`
+
+2. `wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -`
+
+3. `sudo apt-get update`
+
+4. `sudo apt-get install virtualbox-5.1`
+ 
+**Install Vagrant**:
+
+1. `wget https://releases.hashicorp.com/vagrant/1.8.5/vagrant_1.8.5_x86_64.deb`
+
+2. `dpkg -i vagrant_1.8.5_x86_64.deb`
+
+**Reconfigure**:
+
+1. `sudo apt-get install linux-headers-$(uname -r)`
+
+2. `sudo dpkg-reconfigure virtualbox-5.1`
+ 
+**Install Plugins for DigitalOcean and Vagrant**: 
+
+1. `vagrant plugin install vagrant-digitalocean`
+
+2. `vagrant plugin install vagrant-rekey-ssh`
+
+**Generate a Key to Grant Access to the new Droplet**:
+
+`ssh-keygen -t rsa`
+
+**Include Root Certificates to Communicate with DigitalOcean**:
+
+`nano ~/.bashrc`
+
+Add this line to the end of your .bashrc file:
+
+`export SSL_CERT_FILE=[YOUR_PATH_TO_YOUR_ROOT_CERTIFICATE]`
+
+[Generate a DigitalOcean API Key](https://cloud.digitalocean.com/settings/applications) for your Vagrant configuration file.
+ 
+[Follow steps 2 and 3 of the Installation and Setup steps above](https://github.com/nylas/sync-engine#installation-and-setup) to clone the sync engine to the directory of your choice.
+
+Before running `vagrant up`, you will need to edit the Vagrantfile:
+
+`sudo nano Vagrantfile`
+ 
+Modify the Vagrantfile to customize your Droplet as desired. All elements of this sample should be included:
+```
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.hostname = "[YOUR NEW DROPLET NAME]"
+
+  config.vm.provider :digital_ocean do |provider, override|
+    override.ssh.private_key_path = "[YOUR PATH TO NEW RSA KEY]"
+    override.vm.box = "digital_ocean"
+
+    provider.token = "[YOUR DO API TOKEN]"
+    provider.image = "ubuntu-12-04-x64"
+    provider.region = "nyc3"
+    provider.size = "1gb"
+    provider.ca_path = "[YOUR PATH TO YOUR ROOT CERTIFICATES]"
+  end
+```
+
+At this point, you're ready to spin up a new droplet:
+
+`vagrant up --provider=digital_ocean`
+ 
+Once vagrant had spun up the new Droplet, run `vagrant ssh` to get into the new droplet and create a new non-root user and add it to the sudoers group. Make it the owner of the `/vagrant` directory that was created on the new Droplet. From there, you're set to explore the rest of the [Installation and Setup](https://github.com/nylas/sync-engine#installation-and-setup) instructions.
+
 ### Nylas API Service
 
 The Nylas API service provides a REST API for interacting with your data. To start it in your development environment, run command below from the `/vagrant` folder within your VM:
