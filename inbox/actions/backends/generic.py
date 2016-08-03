@@ -11,7 +11,6 @@ from inbox.models.session import session_scope
 from imaplib import IMAP4
 from inbox.sendmail.base import generate_attachments
 from inbox.sendmail.message import create_email
-from inbox.util.misc import imap_folder_path
 
 log = get_logger()
 
