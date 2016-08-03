@@ -97,7 +97,7 @@ class SpanningWhen(When):
         # the singular form if they are equal.
         start, end = cls.parse_keys(raw)
         if start > end:
-            raise ValueError("'{}' must be < '{}'.".format(*cls.json_keys))
+            start, end = (end, start)
         if start == end:
             return cls.singular_cls(start)
         return cls(start, end)
