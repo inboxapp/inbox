@@ -99,6 +99,8 @@ def remote_create_folder(crispin_client, account_id, category_id):
     with session_scope(account_id) as db_session:
         account_provider = db_session.query(Account).get(account_id).provider
         category = db_session.query(Category).get(category_id)
+        if category is None:
+            return
         display_name = category.display_name
 
     # Some generic IMAP providers have different conventions
@@ -124,6 +126,8 @@ def remote_update_folder(crispin_client, account_id, category_id, old_name):
     with session_scope(account_id) as db_session:
         account_provider = db_session.query(Account).get(account_id).provider
         category = db_session.query(Category).get(category_id)
+        if category is None:
+            return
         display_name = category.display_name
 
     if account_provider not in ['gmail', 'eas']:
@@ -144,6 +148,8 @@ def remote_delete_folder(crispin_client, account_id, category_id):
     with session_scope(account_id) as db_session:
         account_provider = db_session.query(Account).get(account_id).provider
         category = db_session.query(Category).get(category_id)
+        if category is None:
+            return
         display_name = category.display_name
 
     try:
