@@ -472,6 +472,13 @@ class FolderSyncEngine(Greenlet):
                       existing_imapuid=existing_imapuid.id)
             return None
 
+        # Check if the message is valid. In some scenarios, we get messages with
+        # the date set to 1970 or a `None` body string.
+        # https://sentry.nylas.com/sentry/sync-prod/group/3387/
+        if msg.body is None or msg.internaldate == datetime.datetime(1970, 1, 1, 0, 0):
+            log.warning('Server returned a message with bad date or empty body.')
+            return None
+
         new_uid = common.create_imap_message(db_session, acct, folder, msg)
         self.add_message_to_thread(db_session, new_uid.message, msg)
 
