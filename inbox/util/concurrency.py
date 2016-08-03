@@ -4,14 +4,14 @@ import random
 import gevent
 from backports import ssl
 from gevent import socket
-
+from redis import TimeoutError
 from nylas.logging import get_logger
 from nylas.logging.sentry import log_uncaught_errors
 log = get_logger()
 
 BACKOFF_DELAY = 30  # seconds to wait before retrying after a failure
 
-TRANSIENT_NETWORK_ERRS = (socket.timeout, socket.error, ssl.SSLError)
+TRANSIENT_NETWORK_ERRS = (socket.timeout, TimeoutError, socket.error, ssl.SSLError)
 
 
 def retry(func, retry_classes=None, fail_classes=None, exc_callback=None,
