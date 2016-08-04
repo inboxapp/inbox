@@ -24,8 +24,8 @@ def retry(func, retry_classes=None, fail_classes=None, exc_callback=None,
     ---------
     func : function
     exc_callback : function, optional
-        Function to execute if an exception is raised within func
-        (e.g., log something)
+        Function to execute if an exception is raised within func. The exception
+        is passed as the first argument. (e.g., log something)
     retry_classes: list of Exception subclasses, optional
         Configures what to retry on. If specified, func is retried only if one
         of these exceptions is raised. Default is to retry on all exceptions.
