@@ -6,7 +6,7 @@ from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from inbox.models.base import MailSyncBase
 from inbox.models.category import Category, CategoryNameType
 from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
-from inbox.models.constants import MAX_FOLDER_NAME_LENGTH
+from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from inbox.sqlalchemy_ext.util import bakery
 from nylas.logging import get_logger
 log = get_logger()
@@ -36,9 +36,9 @@ class Folder(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     # NOTE: this doesn't hold for EAS, which is case insensitive for non-Inbox
     # folders as per
     # https://msdn.microsoft.com/en-us/library/ee624913(v=exchg.80).aspx
-    name = Column(CategoryNameType(MAX_FOLDER_NAME_LENGTH,
+    name = Column(CategoryNameType(MAX_INDEXABLE_LENGTH,
                   collation='utf8mb4_bin'), nullable=False)
-    canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=False,
+    canonical_name = Column(String(MAX_INDEXABLE_LENGTH), nullable=False,
                             default='')
 
     category_id = Column(ForeignKey(Category.id, ondelete='CASCADE'))
