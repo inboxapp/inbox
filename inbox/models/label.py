@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship, backref, validates
 from sqlalchemy.schema import UniqueConstraint
 
 from inbox.models.base import MailSyncBase
-from inbox.models.category import Category, CategoryNameType
+from inbox.models.category import Category, CategoryNameString
 from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
 from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from nylas.logging import get_logger
@@ -27,8 +27,7 @@ class Label(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
             passive_deletes=True),
         load_on_pending=True)
 
-    name = Column(CategoryNameType(MAX_INDEXABLE_LENGTH,
-                  collation='utf8mb4_bin'), nullable=False)
+    name = Column(CategoryNameString(), nullable=False)
     canonical_name = Column(String(MAX_INDEXABLE_LENGTH), nullable=False,
                             default='')
 

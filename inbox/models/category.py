@@ -19,7 +19,7 @@ log = get_logger()
 EPOCH = datetime.utcfromtimestamp(0)
 
 
-class CategoryNameType(String):
+class CategoryNameString(String):
     """
     Column type that extends the sqlalchemy.String to extend its `==`
     comparator for category (Folder/Label/Category) names.
@@ -28,6 +28,10 @@ class CategoryNameType(String):
     ensure that the input of any `==` queries executed against a Column of this
     type match the values that we are actually storing in the database.
     """
+
+    def __init__(self, *args, **kwargs):
+        super(CategoryNameString, self).__init__(MAX_INDEXABLE_LENGTH,
+                                                 collation='utf8mb4_bin')
 
     class comparator_factory(String.Comparator):
         def __eq__(self, other):
@@ -56,8 +60,7 @@ class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
     # STOPSHIP(emfree): need to index properly for API filtering performance.
     name = Column(String(MAX_INDEXABLE_LENGTH), nullable=False, default='')
-    display_name = Column(CategoryNameType(MAX_INDEXABLE_LENGTH,
-                          collation='utf8mb4_bin'), nullable=False)
+    display_name = Column(CategoryNameString(), nullable=False)
 
     type_ = Column(Enum('folder', 'label'), nullable=False, default='folder')
 
