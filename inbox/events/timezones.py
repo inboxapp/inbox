@@ -115,7 +115,7 @@ windows_timezones = {
 
 # Also add the friendly timezone names
 
-utc_friendly_timezones = {
+UTC_friendly_timezones = {
     '(UTC-12:00) International Date Line West': 'Etc/GMT+12',
     '(UTC-11:00) Coordinated Universal Time-11': 'Etc/GMT+11',
     '(UTC-10:00) Hawaii': 'Pacific/Honolulu',
@@ -244,7 +244,7 @@ utc_friendly_timezones = {
 }
 
 # UTC and GMT are equivalent, and some servers can send the GMT version
-gmt_friendly_timezones = {k.replace('(UTC', '(GMT'): v for k, v in utc_friendly_timezones.items()}
+GMT_friendly_timezones = {k.replace('(UTC', '(GMT'): v for k, v in UTC_friendly_timezones.items()}
 
 # Also add the Olson DB timezones (e.g: Europe/Paris, etc.)
 olson_timezones = {tz: tz for tz in pytz.all_timezones}
@@ -264,6 +264,6 @@ awful_timezones = {
 timezones_table = {}
 timezones_table.update(windows_timezones)
 timezones_table.update(olson_timezones)
-timezones_table.update(utc_friendly_timezones)
-timezones_table.update(gmt_friendly_timezones)
+timezones_table.update(UTC_friendly_timezones)
+timezones_table.update(GMT_friendly_timezones)
 timezones_table.update(awful_timezones)
