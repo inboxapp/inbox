@@ -134,10 +134,6 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
                                         unread, starred, db_session, in_):
         query = query.filter(Thread.id.in_(subquery))
 
-    query = query.order_by(desc(Thread.recentdate)).limit(limit)
-    if offset:
-        query = query.offset(offset)
-
     if view == 'count':
         return {"count": query.one()[0]}
 
@@ -147,8 +143,14 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
         expand = (view == 'expanded')
         query = query.options(*Thread.api_loading_options(expand))
 
+    query = query.order_by(desc(Thread.recentdate)).limit(limit)
+    if offset:
+        query = query.offset(offset)
+
     if view == 'ids':
         return [x[0] for x in query.all()]
+
+
 
     return query.all()
 
