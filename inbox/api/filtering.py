@@ -150,8 +150,6 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
     if view == 'ids':
         return [x[0] for x in query.all()]
 
-
-
     return query.all()
 
 
