@@ -4,7 +4,7 @@ from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 
 from inbox.models.base import MailSyncBase
-from inbox.models.category import Category
+from inbox.models.category import Category, CategoryNameType
 from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
 from inbox.models.constants import MAX_FOLDER_NAME_LENGTH
 from inbox.sqlalchemy_ext.util import bakery
@@ -36,8 +36,8 @@ class Folder(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     # NOTE: this doesn't hold for EAS, which is case insensitive for non-Inbox
     # folders as per
     # https://msdn.microsoft.com/en-us/library/ee624913(v=exchg.80).aspx
-    name = Column(String(MAX_FOLDER_NAME_LENGTH, collation='utf8mb4_bin'),
-                  nullable=False)
+    name = Column(CategoryNameType(MAX_FOLDER_NAME_LENGTH,
+                  collation='utf8mb4_bin'), nullable=False)
     canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=False,
                             default='')
 
@@ -51,26 +51,17 @@ class Folder(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     initial_sync_end = Column(DateTime, nullable=True)
 
     @validates('name')
-    def sanitize_name(self, key, name):
-        name = name.rstrip()
-        if len(name) > MAX_FOLDER_NAME_LENGTH:
-            log.warning("Truncating folder name for account {}; original name "
-                        "was '{}'".format(self.account_id, name))
-            name = name[:MAX_FOLDER_NAME_LENGTH]
-        return name
+    def validate_name(self, key, name):
+        sanitized_name = Category.sanitize_name(name)
+        if sanitized_name != name:
+            log.warning("Truncating folder name for account",
+                        account_id=self.account_id, name=name)
+        return sanitized_name
 
     @classmethod
     def find_or_create(cls, session, account, name, role=None):
-        q = session.query(cls).filter(cls.account_id == account.id)
-
-        # Remove trailing whitespace, truncate to max folder name length.
-        # Not ideal but necessary to work around MySQL limitations.
-        name = name.rstrip()
-        if len(name) > MAX_FOLDER_NAME_LENGTH:
-            log.warning("Truncating long folder name for account {}; "
-                        "original name was '{}'" .format(account.id, name))
-            name = name[:MAX_FOLDER_NAME_LENGTH]
-        q = q.filter(cls.name == name)
+        q = session.query(cls).filter(cls.account_id == account.id)\
+            .filter(cls.name == name)
 
         role = role or ''
         try:

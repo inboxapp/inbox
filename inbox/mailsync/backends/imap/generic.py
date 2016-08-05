@@ -85,7 +85,6 @@ from inbox.models import Folder, Account, Message
 from inbox.models.backends.imap import (ImapFolderSyncStatus, ImapThread,
                                         ImapUid, ImapFolderInfo)
 from inbox.models.session import session_scope
-from inbox.models.constants import MAX_FOLDER_NAME_LENGTH
 from inbox.mailsync.backends.imap import common
 from inbox.mailsync.backends.base import (MailsyncDone, MailsyncError,
                                           THROTTLE_COUNT, THROTTLE_WAIT)
@@ -119,10 +118,8 @@ class FolderSyncEngine(Greenlet):
 
         with session_scope(namespace_id) as db_session:
             try:
-                folder_stored_name = folder_name\
-                    .rstrip()[:MAX_FOLDER_NAME_LENGTH]
                 folder = db_session.query(Folder). \
-                    filter(Folder.name == folder_stored_name,
+                    filter(Folder.name == folder_name,
                            Folder.account_id == account_id).one()
             except NoResultFound:
                 raise MailsyncError(u"Missing Folder '{}' on account {}"

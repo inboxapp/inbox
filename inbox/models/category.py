@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, String, ForeignKey, Enum, DateTime
 from sqlalchemy.orm import relationship, validates
+from sqlalchemy.sql import operators
 from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.orm.exc import MultipleResultsFound
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -16,6 +17,14 @@ from inbox.util.misc import fs_folder_path
 log = get_logger()
 
 EPOCH = datetime.utcfromtimestamp(0)
+
+
+class CategoryNameType(String):
+
+    class comparator_factory(String.Comparator):
+        def __eq__(self, other):
+            other = Category.sanitize_name(other)
+            return self.operate(operators.eq, other)
 
 
 class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
@@ -39,21 +48,29 @@ class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
     # STOPSHIP(emfree): need to index properly for API filtering performance.
     name = Column(String(MAX_INDEXABLE_LENGTH), nullable=False, default='')
-    display_name = Column(String(MAX_INDEXABLE_LENGTH,
-                                 collation='utf8mb4_bin'), nullable=False)
+    display_name = Column(CategoryNameType(MAX_INDEXABLE_LENGTH,
+                          collation='utf8mb4_bin'), nullable=False)
 
     type_ = Column(Enum('folder', 'label'), nullable=False, default='folder')
 
     @validates('display_name')
-    def sanitize_display_name(self, key, display_name):
-        if self.type_ == 'label':
-            display_name = unicode(display_name)
-        display_name = display_name.rstrip()
-        if len(display_name) > MAX_INDEXABLE_LENGTH:
-            log.warning('Truncating category name',
-                        type_=self.type_, original=display_name)
-            display_name = display_name[:MAX_INDEXABLE_LENGTH]
-        return display_name
+    def validate_display_name(self, key, display_name):
+        sanitized_name = Category.sanitize_name(display_name)
+        if sanitized_name != display_name:
+            log.warning("Truncating category display_name", type_=self.type_,
+                        account_id=self.account_id, original=display_name)
+        return sanitized_name
+
+    @classmethod
+    def sanitize_name(cls, name):
+        # g_label may not have unicode type (in particular for a numeric
+        # label, e.g. '42'), so coerce to unicode.
+        name = unicode(name)
+        # Remove trailing whitespace, truncate (due to MySQL limitations).
+        name = name.rstrip()
+        if len(name) > MAX_INDEXABLE_LENGTH:
+            name = name[:MAX_INDEXABLE_LENGTH]
+        return name
 
     @classmethod
     def find_or_create(cls, session, namespace_id, name, display_name, type_):
