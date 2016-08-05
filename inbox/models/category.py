@@ -58,7 +58,7 @@ class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         sanitized_name = Category.sanitize_name(display_name)
         if sanitized_name != display_name:
             log.warning("Truncating category display_name", type_=self.type_,
-                        account_id=self.account_id, original=display_name)
+                        original=display_name)
         return sanitized_name
 
     @classmethod
