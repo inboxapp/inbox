@@ -77,7 +77,7 @@ class ImapSyncMonitor(BaseMailSyncMonitor):
 
         """
         account = db_session.query(Account).get(self.account_id)
-        remote_folder_names = {f.display_name.rstrip()[:MAX_FOLDER_NAME_LENGTH]
+        remote_folder_names = {Category.sanitize_name(f.display_name)
                                for f in raw_folders}
 
         assert 'inbox' in {f.role for f in raw_folders},\

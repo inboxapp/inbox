@@ -20,6 +20,14 @@ EPOCH = datetime.utcfromtimestamp(0)
 
 
 class CategoryNameType(String):
+    """
+    Column type that extends the sqlalchemy.String to extend its `==`
+    comparator for category (Folder/Label/Category) names.
+
+    We store rstripped and truncated category names, so this class will
+    ensure that the input of any `==` queries executed against a Column of this
+    type match the values that we are actually storing in the database.
+    """
 
     class comparator_factory(String.Comparator):
         def __eq__(self, other):
