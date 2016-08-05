@@ -249,8 +249,21 @@ gmt_friendly_timezones = {k.replace('(UTC', '(GMT'): v for k, v in utc_friendly_
 # Also add the Olson DB timezones (e.g: Europe/Paris, etc.)
 olson_timezones = {tz: tz for tz in pytz.all_timezones}
 
+# Also add really strange formats we've seen in calendar events
+awful_timezones = {
+    'Pacific': 'America/Los_Angeles',
+    'US/PST': 'America/Los_Angeles',
+    'Mountain': 'America/Denver',
+    'US/MT': 'America/Denver',
+    'Central': 'America/Chicago',
+    'US/CST': 'America/Chicago',
+    'Eastern': 'America/New_York',
+    'US/EST': 'America/New_York'
+}
+
 timezones_table = {}
 timezones_table.update(windows_timezones)
 timezones_table.update(olson_timezones)
 timezones_table.update(utc_friendly_timezones)
 timezones_table.update(gmt_friendly_timezones)
+timezones_table.update(awful_timezones)
