@@ -35,7 +35,7 @@ def _threads_filters(namespace_id, thread_public_id, started_before,
 
 
 def _threads_subqueries(namespace_id, from_addr, to_addr, cc_addr, bcc_addr,
-                        any_email, filename, unread, starred, db_session):
+                        any_email, filename, unread, starred, db_session, in_):
     subqueries = []
     if from_addr is not None:
         subqueries.append(db_session.query(Message.thread_id).
@@ -93,10 +93,7 @@ def _threads_subqueries(namespace_id, from_addr, to_addr, cc_addr, bcc_addr,
         subqueries.append(db_session.query(Message.thread_id).
                           filter(Message.namespace_id == namespace_id,
                                  Message.is_starred == starred).subquery())
-    return subqueries
 
-
-def _threads_join_category(thread_query, namespace_id, in_):
     if in_ is not None:
         category_filters = [Category.name == in_, Category.display_name == in_]
         try:
@@ -104,12 +101,14 @@ def _threads_join_category(thread_query, namespace_id, in_):
             category_filters.append(Category.public_id == in_)
         except InputError:
             pass
-        return thread_query.join(Thread.messages). \
-            join(Message.messagecategories). \
-            join(MessageCategory.category). \
-            filter(Category.namespace_id == namespace_id,
-                   or_(*category_filters))
-    return thread_query
+
+        subqueries.append(db_session.query(Thread.id).join(Thread.messages).
+                          join(Message.messagecategories).
+                          join(MessageCategory.category).
+                          filter(Category.namespace_id == namespace_id,
+                                 or_(*category_filters)).subquery())
+
+    return subqueries
 
 
 def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
@@ -128,11 +127,11 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
                                started_after, last_message_before,
                                last_message_after, subject)
 
-    query = _threads_join_category(query, namespace_id, in_)
     query = query.filter(*filters)
+
     for subquery in _threads_subqueries(namespace_id, from_addr, to_addr,
                                         cc_addr, bcc_addr, any_email, filename,
-                                        unread, starred, db_session):
+                                        unread, starred, db_session, in_):
         query = query.filter(Thread.id.in_(subquery))
 
     if view == 'count':
@@ -145,7 +144,6 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
         query = query.options(*Thread.api_loading_options(expand))
 
     query = query.order_by(desc(Thread.recentdate)).limit(limit)
-
     if offset:
         query = query.offset(offset)
 
