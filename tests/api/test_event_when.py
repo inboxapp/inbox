@@ -15,7 +15,7 @@ class CreateError(Exception):
 def _verify_create(ns_id, api_client, e_data):
     e_resp = api_client.post_data('/events', e_data)
     if e_resp.status_code != 200:
-        raise CreateError()
+        raise CreateError("Expected status 200, got %d" % e_resp.status_code)
 
     e_resp_data = json.loads(e_resp.data)
     assert e_resp_data['object'] == 'event'
