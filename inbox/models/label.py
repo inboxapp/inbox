@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship, backref, validates
 from sqlalchemy.schema import UniqueConstraint
 
 from inbox.models.base import MailSyncBase
-from inbox.models.category import Category, CategoryNameString
+from inbox.models.category import Category, CategoryNameString, sanitize_name
 from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
 from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from nylas.logging import get_logger
@@ -39,7 +39,7 @@ class Label(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
 
     @validates('name')
     def validate_name(self, key, name):
-        sanitized_name = Category.sanitize_name(name)
+        sanitized_name = sanitize_name(name)
         if sanitized_name != name:
             log.warning("Truncating label name for account",
                         account_id=self.account_id, name=name)

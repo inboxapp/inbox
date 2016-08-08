@@ -2,11 +2,11 @@ from datetime import datetime
 
 from sqlalchemy import Column, String, ForeignKey, Enum, DateTime
 from sqlalchemy.orm import relationship, validates
-from sqlalchemy.sql import operators
 from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.orm.exc import MultipleResultsFound
 from sqlalchemy.ext.hybrid import hybrid_property
 
+from inbox.sqlalchemy_ext.util import StringWithTransform
 from inbox.models.base import MailSyncBase
 from inbox.models.mixins import (HasRevisions, HasPublicID,
                                  CaseInsensitiveComparator, DeletedAtMixin,
@@ -19,24 +19,34 @@ log = get_logger()
 EPOCH = datetime.utcfromtimestamp(0)
 
 
-class CategoryNameString(String):
+def sanitize_name(name):
+    # g_label may not have unicode type (in particular for a numeric
+    # label, e.g. '42'), so coerce to unicode.
+    name = unicode(name)
+    # Remove trailing whitespace, truncate (due to MySQL limitations).
+    name = name.rstrip()
+    if len(name) > MAX_INDEXABLE_LENGTH:
+        name = name[:MAX_INDEXABLE_LENGTH]
+    return name
+
+
+class CategoryNameString(StringWithTransform):
     """
-    Column type that extends the sqlalchemy.String to extend its `==`
-    comparator for category (Folder/Label/Category) names.
+    CategoryNameString is a Column type that extends our
+    sqlalchemy_ext.util.StringWithTransform to initialize it with the correct
+    sanitization procedure and the correct string length and collation we use
+    for category names.
 
     We store rstripped and truncated category names, so this class will
-    ensure that the input of any `==` queries executed against a Column of this
+    ensure that all strings of this type are correctly truncated and sanitized,
+    and the input of any `==` queries executed against a Column of this
     type match the values that we are actually storing in the database.
     """
 
     def __init__(self, *args, **kwargs):
-        super(CategoryNameString, self).__init__(MAX_INDEXABLE_LENGTH,
-                                                 collation='utf8mb4_bin')
-
-    class comparator_factory(String.Comparator):
-        def __eq__(self, other):
-            other = Category.sanitize_name(other)
-            return self.operate(operators.eq, other)
+        super(CategoryNameString, self)\
+            .__init__(sanitize_name, MAX_INDEXABLE_LENGTH,
+                      collation='utf8mb4_bin')
 
 
 class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
@@ -66,22 +76,11 @@ class Category(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
     @validates('display_name')
     def validate_display_name(self, key, display_name):
-        sanitized_name = Category.sanitize_name(display_name)
+        sanitized_name = sanitize_name(display_name)
         if sanitized_name != display_name:
             log.warning("Truncating category display_name", type_=self.type_,
                         original=display_name)
         return sanitized_name
-
-    @classmethod
-    def sanitize_name(cls, name):
-        # g_label may not have unicode type (in particular for a numeric
-        # label, e.g. '42'), so coerce to unicode.
-        name = unicode(name)
-        # Remove trailing whitespace, truncate (due to MySQL limitations).
-        name = name.rstrip()
-        if len(name) > MAX_INDEXABLE_LENGTH:
-            name = name[:MAX_INDEXABLE_LENGTH]
-        return name
 
     @classmethod
     def find_or_create(cls, session, namespace_id, name, display_name, type_):
