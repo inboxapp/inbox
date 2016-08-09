@@ -267,9 +267,9 @@ class FolderSyncEngine(Greenlet):
                 db_session.add(saved_folder_status)
 
             cb(saved_folder_status)
+            db_session.commit()
 
             self.state = saved_folder_status.state
-            db_session.commit()
 
     def set_stopped(self, db_session):
         self.update_folder_sync_status(lambda s: s.stop_sync())
