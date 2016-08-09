@@ -50,7 +50,7 @@ class BaseSyncMonitor(Greenlet):
         try:
             while True:
                 retry_with_logging(self._run_impl, account_id=self.account_id,
-                                   fail_classes=(ValidationError),
+                                   fail_classes=[ValidationError],
                                    provider=self.provider_name, logger=self.log)
         except ValidationError:
             # Bad account credentials; exit.
