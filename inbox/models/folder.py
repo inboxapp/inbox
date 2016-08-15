@@ -4,14 +4,15 @@ from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 
 from inbox.models.base import MailSyncBase
-from inbox.models.category import Category
-from inbox.models.constants import MAX_FOLDER_NAME_LENGTH
+from inbox.models.category import Category, CategoryNameString, sanitize_name
+from inbox.models.mixins import UpdatedAtMixin, DeletedAtMixin
+from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from inbox.sqlalchemy_ext.util import bakery
 from nylas.logging import get_logger
 log = get_logger()
 
 
-class Folder(MailSyncBase):
+class Folder(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     """ Folders from the remote account backend (Generic IMAP/ Gmail). """
     # TOFIX this causes an import error due to circular dependencies
     # from inbox.models.account import Account
@@ -35,9 +36,19 @@ class Folder(MailSyncBase):
     # NOTE: this doesn't hold for EAS, which is case insensitive for non-Inbox
     # folders as per
     # https://msdn.microsoft.com/en-us/library/ee624913(v=exchg.80).aspx
-    name = Column(String(MAX_FOLDER_NAME_LENGTH, collation='utf8mb4_bin'),
-                  nullable=True)
-    canonical_name = Column(String(MAX_FOLDER_NAME_LENGTH), nullable=True)
+    name = Column(CategoryNameString(), nullable=False)
+    _canonical_name = Column(String(MAX_INDEXABLE_LENGTH), nullable=False,
+                             default='', name="canonical_name")
+
+    @property
+    def canonical_name(self):
+        return self._canonical_name
+
+    @canonical_name.setter
+    def canonical_name(self, value):
+        value = value or ''
+        self._canonical_name = value
+        self.category.name = value
 
     category_id = Column(ForeignKey(Category.id, ondelete='CASCADE'))
     category = relationship(
@@ -49,27 +60,19 @@ class Folder(MailSyncBase):
     initial_sync_end = Column(DateTime, nullable=True)
 
     @validates('name')
-    def sanitize_name(self, key, name):
-        name = name.rstrip()
-        if len(name) > MAX_FOLDER_NAME_LENGTH:
-            log.warning("Truncating folder name for account {}; original name "
-                        "was '{}'".format(self.account_id, name))
-            name = name[:MAX_FOLDER_NAME_LENGTH]
-        return name
+    def validate_name(self, key, name):
+        sanitized_name = sanitize_name(name)
+        if sanitized_name != name:
+            log.warning("Truncating folder name for account",
+                        account_id=self.account_id, name=name)
+        return sanitized_name
 
     @classmethod
     def find_or_create(cls, session, account, name, role=None):
-        q = session.query(cls).filter(cls.account_id == account.id)
+        q = session.query(cls).filter(cls.account_id == account.id)\
+            .filter(cls.name == name)
 
-        # Remove trailing whitespace, truncate to max folder name length.
-        # Not ideal but necessary to work around MySQL limitations.
-        name = name.rstrip()
-        if len(name) > MAX_FOLDER_NAME_LENGTH:
-            log.warning("Truncating long folder name for account {}; "
-                        "original name was '{}'" .format(account.id, name))
-            name = name[:MAX_FOLDER_NAME_LENGTH]
-        q = q.filter(cls.name == name)
-
+        role = role or ''
         try:
             obj = q.one()
         except NoResultFound:
@@ -83,9 +86,6 @@ class Folder(MailSyncBase):
                      .format(name, account.id))
             raise
 
-        if obj.canonical_name is None:
-            obj.canonical_name = role
-
         return obj
 
     @classmethod
@@ -94,4 +94,5 @@ class Folder(MailSyncBase):
         q += lambda q: q.filter(cls.id == bindparam('id_'))
         return q(session).params(id_=id_).first()
 
-    __table_args__ = (UniqueConstraint('account_id', 'name'),)
+    __table_args__ = \
+        (UniqueConstraint('account_id', 'name', 'canonical_name'),)

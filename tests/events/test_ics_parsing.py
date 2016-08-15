@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa: F401
 import pytest
 import arrow
 from inbox.models.event import Event, RecurringEvent
@@ -100,7 +101,7 @@ def test_event_update(db, default_account, message):
         Event.uid == "jvbroggos139aumnj4p5og9rd0@google.com").one()
 
     assert ev.location == (u"Le Zenith, 211 Avenue Jean Jaures, "
-                            "75019 Paris, France")
+                           "75019 Paris, France")
 
 
 # This test checks that:
@@ -163,7 +164,7 @@ def test_self_sent_update(db, default_account, message):
                                    "75009 Paris, France")
         else:
             assert ev.location == (u"Le Zenith, 211 Avenue Jean Jaures, "
-                                    "75019 Paris, France")
+                                   "75019 Paris, France")
 
 
 def test_recurring_ical(db, default_account):

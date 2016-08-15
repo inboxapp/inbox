@@ -1,16 +1,16 @@
-
-
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, Index
 from sqlalchemy.orm import (relationship)
 from inbox.sqlalchemy_ext.util import JSON
 
 from inbox.models.base import MailSyncBase
-from inbox.models.mixins import HasPublicID, HasRevisions
+from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
+                                 DeletedAtMixin)
 from inbox.sqlalchemy_ext.util import Base36UID
 from inbox.models.namespace import Namespace
 
 
-class Metadata(MailSyncBase, HasPublicID, HasRevisions):
+class Metadata(MailSyncBase, HasPublicID, HasRevisions, UpdatedAtMixin,
+               DeletedAtMixin):
     """
     Key-value store for applications to store arbitrary data associated with
     mail. API object public_id's are used as the keys, and values are JSON.
@@ -46,6 +46,8 @@ class Metadata(MailSyncBase, HasPublicID, HasRevisions):
     object_id = Column(BigInteger, nullable=False)
 
     value = Column(JSON)
+
+    queryable_value = Column(BigInteger, nullable=True, index=True)
 
     version = Column(Integer, nullable=True, server_default='0')
 

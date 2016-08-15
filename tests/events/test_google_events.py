@@ -367,6 +367,7 @@ def test_handle_http_401():
     assert len(provider._get_access_token.mock_calls) == 2
 
 
+@pytest.mark.usefixtures('mock_gevent_sleep')
 def test_handle_quota_exceeded():
     first_response = requests.Response()
     first_response.status_code = 403
@@ -389,7 +390,6 @@ def test_handle_quota_exceeded():
     })
 
     requests.get = mock.Mock(side_effect=[first_response, second_response])
-    gevent.sleep = mock.Mock()
     provider = GoogleEventsProvider(1, 1)
     provider._get_access_token = mock.Mock(return_value='token')
     items = provider._get_resource_list('https://googleapis.com/testurl')
@@ -398,6 +398,7 @@ def test_handle_quota_exceeded():
     assert items == ['A', 'B', 'C']
 
 
+@pytest.mark.usefixtures('mock_gevent_sleep')
 def test_handle_internal_server_error():
     first_response = requests.Response()
     first_response.status_code = 503
@@ -409,7 +410,6 @@ def test_handle_internal_server_error():
     })
 
     requests.get = mock.Mock(side_effect=[first_response, second_response])
-    gevent.sleep = mock.Mock()
     provider = GoogleEventsProvider(1, 1)
     provider._get_access_token = mock.Mock(return_value='token')
     items = provider._get_resource_list('https://googleapis.com/testurl')
@@ -427,7 +427,7 @@ def test_handle_api_not_enabled():
             'message': 'Access Not Configured.',
             'errors': [
                 {'domain': 'usageLimits', 'message': 'Access Not Configured',
-                  'reason': 'accessNotConfigured',
+                 'reason': 'accessNotConfigured',
                  'extendedHelp': 'https://console.developers.google.com'}
             ]
         }

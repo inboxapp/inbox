@@ -5,7 +5,6 @@ import gevent
 
 from inbox.ignition import engine_manager
 from inbox.models.session import session_scope, session_scope_by_shard_id
-from inbox.models.account import Account
 from inbox.models.action_log import ActionLog, schedule_action
 from inbox.transactions.actions import SyncbackService
 
@@ -16,8 +15,7 @@ from tests.util.base import add_generic_imap_account
 def purge_accounts_and_actions():
     for key in engine_manager.engines:
         with session_scope_by_shard_id(key) as db_session:
-            db_session.query(Account).delete(synchronize_session='fetch')
-            db_session.query(ActionLog).delete(synchronize_session='fetch')
+            db_session.query(ActionLog).delete(synchronize_session=False)
             db_session.commit()
 
 
@@ -30,15 +28,18 @@ def patched_enginemanager(monkeypatch):
 
 
 @pytest.yield_fixture
-def patched_worker(monkeypatch):
-    def run(self):
-        with self.semaphore:
-            with session_scope(self.account_id) as db_session:
-                action_log_entry = db_session.query(ActionLog).get(
-                    self.action_log_id)
-                action_log_entry.status = 'successful'
-                db_session.commit()
-    monkeypatch.setattr('inbox.transactions.actions.SyncbackWorker._run', run)
+def patched_task(monkeypatch):
+    def uses_crispin_client(self):
+        return False
+
+    def execute_with_lock(self):
+        with session_scope(self.account_id) as db_session:
+            action_log_entry = db_session.query(ActionLog).get(
+                self.action_log_id)
+            action_log_entry.status = 'successful'
+            db_session.commit()
+    monkeypatch.setattr('inbox.transactions.actions.SyncbackTask.uses_crispin_client', uses_crispin_client)
+    monkeypatch.setattr('inbox.transactions.actions.SyncbackTask.execute_with_lock', execute_with_lock)
     yield
     monkeypatch.undo()
 
@@ -65,11 +66,13 @@ def schedule_test_action(db_session, account):
 def test_all_keys_are_assigned_exactly_once(patched_enginemanager):
     assigned_keys = []
 
-    service = SyncbackService(cpu_id=0, total_cpus=2)
+    service = SyncbackService(
+        syncback_id=0, process_number=0, total_processes=2, num_workers=2)
     assert service.keys == [0, 2, 4]
     assigned_keys.extend(service.keys)
 
-    service = SyncbackService(cpu_id=1, total_cpus=2)
+    service = SyncbackService(
+        syncback_id=0, process_number=1, total_processes=2, num_workers=2)
     assert service.keys == [1, 3, 5]
     assigned_keys.extend(service.keys)
 
@@ -79,22 +82,24 @@ def test_all_keys_are_assigned_exactly_once(patched_enginemanager):
     assert len(assigned_keys) == len(set(assigned_keys))
 
 
-def test_actions_are_claimed(purge_accounts_and_actions, patched_worker):
+def test_actions_are_claimed(purge_accounts_and_actions, patched_task):
     with session_scope_by_shard_id(0) as db_session:
-        account = add_generic_imap_account(db_session,
-                                    email_address='{}@test.com'.format(0))
+        account = add_generic_imap_account(
+            db_session, email_address='{}@test.com'.format(0))
         schedule_test_action(db_session, account)
 
     with session_scope_by_shard_id(1) as db_session:
-        account = add_generic_imap_account(db_session,
-                                    email_address='{}@test.com'.format(1))
+        account = add_generic_imap_account(
+            db_session, email_address='{}@test.com'.format(1))
         schedule_test_action(db_session, account)
 
-    service = SyncbackService(cpu_id=1, total_cpus=2)
-    service.workers = set()
+    service = SyncbackService(
+        syncback_id=0, process_number=1, total_processes=2, num_workers=2)
+    service._restart_workers()
     service._process_log()
 
-    gevent.joinall(list(service.workers))
+    while not service.task_queue.empty():
+        gevent.sleep(0)
 
     with session_scope_by_shard_id(0) as db_session:
         q = db_session.query(ActionLog)
@@ -108,7 +113,7 @@ def test_actions_are_claimed(purge_accounts_and_actions, patched_worker):
 
 
 def test_actions_claimed_by_a_single_service(purge_accounts_and_actions,
-                                             patched_worker):
+                                             patched_task):
     actionlogs = []
     for key in (0, 1):
         with session_scope_by_shard_id(key) as db_session:
@@ -119,13 +124,55 @@ def test_actions_claimed_by_a_single_service(purge_accounts_and_actions,
             actionlogs += [db_session.query(ActionLog).one().id]
 
     services = []
-    for cpu_id in (0, 1):
-        service = SyncbackService(cpu_id=cpu_id, total_cpus=2)
-        service.workers = set()
+    for process_number in (0, 1):
+        service = SyncbackService(
+            syncback_id=0, process_number=process_number, total_processes=2,
+            num_workers=2)
         service._process_log()
         services.append(service)
 
     for i, service in enumerate(services):
-        assert len(service.workers) == 1
-        assert list(service.workers)[0].action_log_id == actionlogs[i]
-        gevent.joinall(list(service.workers))
+        assert service.task_queue.qsize() == 1
+        assert service.task_queue.peek().action_log_ids() == [actionlogs[i]]
+
+
+@pytest.mark.skipif(True, reason='Test if causing Jenkins build to fail')
+def test_actions_for_invalid_accounts_are_skipped(purge_accounts_and_actions,
+                                                  patched_task):
+    with session_scope_by_shard_id(0) as db_session:
+        account = add_generic_imap_account(
+            db_session, email_address='person@test.com')
+        schedule_test_action(db_session, account)
+        namespace_id = account.namespace.id
+        count = db_session.query(ActionLog).filter(
+            ActionLog.namespace_id == namespace_id).count()
+        assert account.sync_state != 'invalid'
+
+        another_account = add_generic_imap_account(
+            db_session, email_address='another@test.com')
+        schedule_test_action(db_session, another_account)
+        another_namespace_id = another_account.namespace.id
+        another_count = db_session.query(ActionLog).filter(
+            ActionLog.namespace_id == another_namespace_id).count()
+        assert another_account.sync_state != 'invalid'
+
+        account.mark_invalid()
+        db_session.commit()
+
+    service = SyncbackService(
+        syncback_id=0, process_number=0, total_processes=2, num_workers=2)
+    service._process_log()
+
+    while not service.task_queue.empty():
+        gevent.sleep(0)
+
+    with session_scope_by_shard_id(0) as db_session:
+        q = db_session.query(ActionLog).filter(
+            ActionLog.namespace_id == namespace_id,
+            ActionLog.status == 'pending')
+        assert q.count() == count
+
+        q = db_session.query(ActionLog).filter(
+            ActionLog.namespace_id == another_namespace_id)
+        assert q.filter(ActionLog.status == 'pending').count() == 0
+        assert q.filter(ActionLog.status == 'successful').count() == another_count

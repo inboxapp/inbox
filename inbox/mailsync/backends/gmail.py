@@ -22,7 +22,7 @@ user always gets the full thread when they look at mail.
 from __future__ import division
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from gevent import kill, spawn, sleep
+import gevent
 from sqlalchemy.orm import joinedload, load_only
 
 from inbox.util.itert import chunk
@@ -31,6 +31,7 @@ from inbox.util.debug import bind_context
 from nylas.logging import get_logger
 from gevent.lock import Semaphore
 from inbox.models import Message, Folder, Namespace, Account, Label, Category
+from inbox.models.category import EPOCH
 from inbox.models.backends.imap import ImapFolderInfo, ImapUid, ImapThread
 from inbox.models.session import session_scope
 from inbox.mailsync.backends.imap.generic import FolderSyncEngine
@@ -117,10 +118,10 @@ class GmailSyncMonitor(ImapSyncMonitor):
         # associated with the label.
         for deleted_label in deleted_labels:
             # Don't mark canonical labels such as Inbox, Important, etc.
-            if deleted_label.canonical_name is None:
+            if not deleted_label.canonical_name:
                 deleted_label.deleted_at = datetime.now()
-                cat = deleted_label.category
-                cat.deleted_at = datetime.now()
+                category = deleted_label.category
+                category.deleted_at = datetime.now()
 
     def save_folder_names(self, db_session, raw_folders):
         """
@@ -173,7 +174,7 @@ class GmailSyncMonitor(ImapSyncMonitor):
                 log.info('Deleted label recreated on remote',
                          name=raw_folder.display_name)
                 label.deleted_at = None
-                label.category.deleted_at = None
+                label.category.deleted_at = EPOCH
 
             current_labels.add(label)
 
@@ -187,10 +188,10 @@ class GmailSyncMonitor(ImapSyncMonitor):
                 db_session.expunge(label)
 
                 rename_handler = LabelRenameHandler(
-                     account_id=self.account_id,
-                     namespace_id=self.namespace_id,
-                     label_name=label.name,
-                     semaphore=self.label_rename_semaphore)
+                    account_id=self.account_id,
+                    namespace_id=self.namespace_id,
+                    label_name=label.name,
+                    semaphore=self.label_rename_semaphore)
 
                 rename_handler.start()
 
@@ -236,7 +237,7 @@ class GmailFolderSyncEngine(FolderSyncEngine):
                         db_session, remote_uid_count=len(remote_uids),
                         download_uid_count=len(unknown_uids))
 
-            change_poller = spawn(self.poll_for_changes)
+            change_poller = gevent.spawn(self.poll_for_changes)
             bind_context(change_poller, 'changepoller', self.account_id,
                          self.folder_id)
 
@@ -271,7 +272,7 @@ class GmailFolderSyncEngine(FolderSyncEngine):
         finally:
             if change_poller is not None:
                 # schedule change_poller to die
-                kill(change_poller)
+                gevent.kill(change_poller)
 
     def resync_uids_impl(self):
         with session_scope(self.namespace_id) as db_session:
@@ -477,7 +478,7 @@ class GmailFolderSyncEngine(FolderSyncEngine):
                 # messages for this batch are synced.
                 # Note this is an approx. limit since we use the #(uids),
                 # not the #(messages).
-                sleep(THROTTLE_WAIT)
+                gevent.sleep(THROTTLE_WAIT)
 
     @property
     def throttled(self):

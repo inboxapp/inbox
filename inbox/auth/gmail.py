@@ -104,6 +104,7 @@ class GmailAuthHandler(OAuthAuthHandler):
         # (redwood auth versus bin/inbox-auth)
         namespace = Namespace()
         account = GmailAccount(namespace=namespace)
+        account.create_emailed_events_calendar()
         return self.update_account(account, response)
 
     def update_account(self, account, response):
@@ -231,7 +232,7 @@ class GmailAuthHandler(OAuthAuthHandler):
             url_args['login_hint'] = email_address
         url = url_concat(self.OAUTH_AUTHENTICATE_URL, url_args)
 
-        print 'To authorize Inbox, visit this URL and follow the directions:'
+        print 'To authorize Nylas, visit this URL and follow the directions:'
         print '\n{}'.format(url)
 
         while True:

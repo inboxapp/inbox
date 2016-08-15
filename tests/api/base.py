@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 import json
-from pytest import yield_fixture, fixture
+from pytest import fixture, yield_fixture
 from base64 import b64encode
-import os
 
 
 def new_api_client(db, namespace):
@@ -20,20 +18,9 @@ def api_client(db, default_namespace):
         yield TestAPIClient(c, default_namespace.public_id)
 
 
-@fixture(scope='function')
-def attachments(db):
-    filenames = ['muir.jpg', 'LetMeSendYouEmail.wav', 'piece-jointe.jpg']
-    data = []
-    for filename in filenames:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..',
-                            'data', filename).encode('utf-8')
-        # Mac and linux fight over filesystem encodings if we store this
-        # filename on the fs. Work around by changing the filename we upload
-        # instead.
-        if filename == 'piece-jointe.jpg':
-            filename = u'pièce-jointe.jpg'
-        data.append((filename, path))
-    return data
+@fixture
+def imap_api_client(db, generic_account):
+    return new_api_client(db, generic_account.namespace)
 
 
 class TestAPIClient(object):

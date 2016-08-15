@@ -1,3 +1,4 @@
+# flake8: noqa: F401, F811
 from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import desc
@@ -55,7 +56,7 @@ def test_deleting_from_a_message_with_multiple_uids(db, default_account,
     inbox_folder = Folder.find_or_create(db.session, default_account, 'inbox',
                                          'inbox')
     sent_folder = Folder.find_or_create(db.session, default_account, 'sent',
-                                         'sent')
+                                        'sent')
 
     add_fake_imapuid(db.session, default_account.id, message, sent_folder,
                      1337)
@@ -241,8 +242,7 @@ def test_renamed_label_refresh(db, default_account, thread, message,
     semaphore.acquire()
     rename_handler.start()
 
-    # Wait 10 secs and check that the data hasn't changed.
-    gevent.sleep(10)
+    gevent.sleep(0)  # yield to the handler
 
     labels = list(imapuid.labels)
     assert len(labels) == 1

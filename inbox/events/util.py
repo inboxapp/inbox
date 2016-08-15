@@ -58,6 +58,9 @@ def parse_google_time(d):
 def google_to_event_time(start_raw, end_raw):
     start = parse_google_time(start_raw)
     end = parse_google_time(end_raw)
+    if start > end:
+        start, end = (end, start)
+
     if 'date' in start_raw:
         # Google all-day events normally end a 'day' later than they should,
         # but not always if they were created by a third-party client.
@@ -74,6 +77,22 @@ def google_to_event_time(start_raw, end_raw):
 def valid_base36(uid):
     # Check that an uid is a base36 element.
     return all(c in (string.ascii_lowercase + string.digits) for c in uid)
+
+
+def removed_participants(original_participants, update_participants):
+    """Returns the name and addresses of the participants which have been
+    removed."""
+    original_table = {part['email']: part.get('name') for part in original_participants
+                      if 'email' in part}
+    update_table = {part['email']: part.get('name') for part in update_participants
+                    if 'email' in part}
+
+    ret = []
+    for email in original_table:
+        if email not in update_table:
+            ret.append(dict(email=email, name=original_table[email]))
+
+    return ret
 
 
 # Container for a parsed API response. API calls return adds/updates/deletes

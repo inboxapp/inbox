@@ -174,9 +174,9 @@ fi
 color '35;1' 'Ensuring setuptools and pip versions...'
 # If python-setuptools is actually the old 'distribute' fork of setuptools,
 # then the first 'pip install setuptools' will be a no-op.
-pip install 'pip==7.1.2' 'setuptools>=5.3'
+pip install 'pip==8.1.2' 'setuptools>=5.3'
 hash pip        # /usr/bin/pip might now be /usr/local/bin/pip
-pip install 'pip==7.1.2' 'setuptools>=5.3'
+pip install 'pip==8.1.2' 'setuptools>=5.3'
 
 # Doing pip upgrade setuptools leaves behind this problematic symlink
 rm -rf /usr/lib/python2.7/dist-packages/setuptools.egg-info
@@ -192,7 +192,7 @@ color '35;1' 'Removing .pyc files...'   # they might be stale
 find . -name \*.pyc -delete
 
 color '35;1' 'Installing dependencies from pip...'
-SODIUM_INSTALL=system pip install -r requirements.txt -q
+SODIUM_INSTALL=system pip install -r requirements.txt
 pip install -e .
 
 color '35;1' 'Finished installing dependencies.'

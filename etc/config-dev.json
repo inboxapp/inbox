@@ -35,6 +35,11 @@
     }
 ],
 
+"SYNCBACK_ASSIGNMENTS": {
+    0:[0,1,2,3,4,5]
+
+},
+
 "SYNC_STEAL_ACCOUNTS": true,
 
 "DB_POOL_SIZE": 25,
@@ -43,8 +48,8 @@
 "LOGDIR": "/var/log/inboxapp",
 "LOGLEVEL": 10,
 
-"REDIS_HOSTNAME": "localhost",
 "REDIS_PORT": 6379,
+"REDIS_SHARDS": ["localhost"],
 
 "ACCOUNT_QUEUE_REDIS_HOSTNAME": "localhost",
 "ACCOUNT_QUEUE_REDIS_DB": 3,
@@ -69,5 +74,8 @@
 "FEATURE_FLAGS": "ical_autoimport",
 
 "THROTTLE_DELETION": false,
-"UMPIRE_BASE_URL": "127.0.0.1"
+"UMPIRE_BASE_URL": "127.0.0.1",
+
+"MAILGUN_DOMAIN": null,
+"MAILGUN_API_KEY": null
 }

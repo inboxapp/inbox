@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import (Column, Integer, BigInteger, Boolean, Enum,
@@ -16,7 +17,7 @@ from inbox.models.account import Account
 from inbox.models.thread import Thread
 from inbox.models.message import Message
 from inbox.models.folder import Folder
-from inbox.models.mixins import HasRunState
+from inbox.models.mixins import HasRunState, UpdatedAtMixin, DeletedAtMixin
 from inbox.models.label import Label
 from inbox.util.misc import cleanup_subject
 
@@ -69,7 +70,7 @@ class ImapAccount(Account):
     __mapper_args__ = {'polymorphic_identity': 'imapaccount'}
 
 
-class ImapUid(MailSyncBase):
+class ImapUid(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     """
     Maps UIDs to their IMAP folders and per-UID flag metadata.
     This table is used solely for bookkeeping by the IMAP mail sync backends.
@@ -135,9 +136,17 @@ class ImapUid(MailSyncBase):
                 changed = True
                 setattr(self, col, new_flag_value)
             new_flags.discard(flag)
+
         extra_flags = sorted(new_flags)
+
         if extra_flags != self.extra_flags:
             changed = True
+
+        # Sadly, there's a limit of 255 chars for this
+        # column.
+        while len(json.dumps(extra_flags)) > 255:
+            extra_flags.pop()
+
         self.extra_flags = extra_flags
         return changed
 
@@ -198,7 +207,7 @@ class ImapUid(MailSyncBase):
 Index('account_id_folder_id', ImapUid.account_id, ImapUid.folder_id)
 
 
-class ImapFolderInfo(MailSyncBase):
+class ImapFolderInfo(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     """
     Per-folder UIDVALIDITY and (if applicable) HIGHESTMODSEQ.
 
@@ -242,7 +251,7 @@ def _choose_existing_thread_for_gmail(message, db_session):
     object; otherwise return None.
 
     If a thread in Gmail (as identified by g_thrid) is split among multiple
-    Inbox threads, try to choose which thread to put the new message in based
+    Nylas threads, try to choose which thread to put the new message in based
     on the In-Reply-To header. If that doesn't succeed because the In-Reply-To
     header is missing or doesn't match existing synced messages, return the
     most recent thread.
@@ -321,7 +330,8 @@ class ImapThread(Thread):
     __mapper_args__ = {'polymorphic_identity': 'imapthread'}
 
 
-class ImapFolderSyncStatus(MailSyncBase, HasRunState):
+class ImapFolderSyncStatus(MailSyncBase, HasRunState, UpdatedAtMixin,
+                           DeletedAtMixin):
     """ Per-folder status state saving for IMAP folders. """
     account_id = Column(ForeignKey(ImapAccount.id, ondelete='CASCADE'),
                         nullable=False)
@@ -389,7 +399,7 @@ class ImapFolderSyncStatus(MailSyncBase, HasRunState):
     __table_args__ = (UniqueConstraint('account_id', 'folder_id'),)
 
 
-class LabelItem(MailSyncBase):
+class LabelItem(MailSyncBase, UpdatedAtMixin, DeletedAtMixin):
     """ Mapping between imapuids and labels. """
     imapuid_id = Column(ForeignKey(ImapUid.id, ondelete='CASCADE'),
                         nullable=False)

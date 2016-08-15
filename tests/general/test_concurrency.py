@@ -2,11 +2,13 @@ import time
 
 import pytest
 from gevent import GreenletExit
+from gevent import socket
 
 from inbox.util.concurrency import retry_with_logging
 
 
 class MockLogger(object):
+
     def __init__(self):
         self.call_count = 0
 
@@ -31,6 +33,7 @@ class FailingFunction(object):
         return
 
 
+@pytest.mark.usefixtures('mock_gevent_sleep')
 def test_retry_with_logging():
     logger = MockLogger()
     failing_function = FailingFunction(ValueError)
@@ -56,3 +59,20 @@ def test_selective_retry():
                            fail_classes=[ValueError])
     assert logger.call_count == 0
     assert failing_function.call_count == 1
+
+
+@pytest.mark.usefixtures('mock_gevent_sleep')
+def test_no_logging_until_many_transient_error():
+    logger = MockLogger()
+
+    failing_function = FailingFunction(socket.error, max_executions=2)
+    retry_with_logging(failing_function, logger=logger)
+
+    assert logger.call_count == 0
+    assert failing_function.call_count == 2
+
+    failing_function = FailingFunction(socket.error, max_executions=21)
+    retry_with_logging(failing_function, logger=logger)
+
+    assert logger.call_count == 1
+    assert failing_function.call_count == 21

@@ -11,7 +11,6 @@ revision = 'adc646e1f11'
 down_revision = '41a7e825d108'
 
 from alembic import op
-import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
 import os.path
 
@@ -71,7 +70,7 @@ def upgrade():
                 scope=acct.o_scope,
                 refresh_token=acct.o_refresh_token,
                 verified_email=acct.o_verified_email
-                )
+            )
 
             new_account = gmail.create_account(db_session,
                                                acct.email_address,

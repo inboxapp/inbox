@@ -39,7 +39,7 @@ def _fallback_get_mx_domains(domain):
         return []
 
 
-def get_mx_domains(domain):
+def get_mx_domains(domain, dns_resolver=dns_resolver):
     """ Retrieve and return the MX records for a domain. """
     mx_records = []
     try:
@@ -84,12 +84,12 @@ def mx_match(mx_domains, match_domains):
     return False
 
 
-def provider_from_address(email_address):
+def provider_from_address(email_address, dns_resolver=dns_resolver):
     if not EMAIL_REGEX.match(email_address):
         raise InvalidEmailAddressError('Invalid email address')
 
     domain = email_address.split('@')[1].lower()
-    mx_domains = get_mx_domains(domain)
+    mx_domains = get_mx_domains(domain, dns_resolver)
     ns_records = []
     try:
         ns_records = dns_resolver.query(domain, 'NS')
@@ -184,15 +184,18 @@ def naked_domain(url):
 
 
 def matching_subdomains(new_value, old_value):
-    """We allow our customers to update their server addresses,
+    """
+    We allow our customers to update their server addresses,
     provided that the new server has:
     1. the same IP as the old server
-    2. shares the same top-level domain name."""
+    2. shares the same top-level domain name.
+
+    """
 
     if new_value is None and old_value is not None:
         return False
 
-    if new_value == old_value:
+    if new_value.lower() == old_value.lower():
         return True
 
     new_domain = naked_domain(new_value)

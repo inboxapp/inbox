@@ -1,3 +1,4 @@
+import os
 import binascii
 import datetime
 import itertools
@@ -21,22 +22,41 @@ from inbox.util.addr import parse_mimepart_address_header
 from inbox.util.misc import parse_references, get_internaldate
 from inbox.util.blockstore import save_to_blockstore
 from inbox.security.blobstorage import encode_blob, decode_blob
-from inbox.models.mixins import HasPublicID, HasRevisions
+from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
+                                 DeletedAtMixin)
 from inbox.models.base import MailSyncBase
 from inbox.models.namespace import Namespace
 from inbox.models.category import Category
 
+from inbox.sqlalchemy_ext.util import MAX_MYSQL_INTEGER
 
-def _trim_filename(s, namespace_id, max_len=64):
-    if s and len(s) > max_len:
-        log.warning('filename is too long, truncating',
-                    max_len=max_len, filename=s,
-                    namespace_id=namespace_id)
-        return s[:max_len - 8] + s[-8:]  # Keep extension
+
+def _trim_filename(s, namespace_id, max_len=255):
+    if s is None:
+        return s
+
+    # The filename may be up to 255 4-byte unicode characters. If the
+    # filename is longer than that, truncate it appropriately.
+
+    # If `s` is not stored as a unicode string, but contains unicode
+    # characters, len will return the wrong value (bytes not chars).
+    # Convert it to unicode first.
+    if not isinstance(s, unicode):
+        s = s.decode('utf-8', 'ignore')
+
+    if len(s) > max_len:
+        # If we need to truncate the string, keep the extension
+        filename, fileext = os.path.splitext(s)
+        if len(fileext) < max_len - 1:
+            return filename[:(max_len - len(fileext))] + fileext
+        else:
+            return filename[0] + fileext[:(max_len - 1)]
+
     return s
 
 
-class Message(MailSyncBase, HasRevisions, HasPublicID):
+class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
+              DeletedAtMixin):
 
     @property
     def API_OBJECT_NAME(self):
@@ -75,13 +95,24 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
     is_read = Column(Boolean, server_default=false(), nullable=False)
     is_starred = Column(Boolean, server_default=false(), nullable=False)
 
-    # For drafts (both Inbox-created and otherwise)
+    # For drafts (both Nylas-created and otherwise)
     is_draft = Column(Boolean, server_default=false(), nullable=False)
     is_sent = Column(Boolean, server_default=false(), nullable=False)
 
     # REPURPOSED
     state = Column(Enum('draft', 'sending', 'sending failed', 'sent',
                         'actions_pending', 'actions_committed'))
+
+    @property
+    def is_sending(self):
+        return self.version == MAX_MYSQL_INTEGER and not self.is_draft
+
+    def mark_as_sending(self):
+        if self.is_sent:
+            raise ValueError('Cannot mark a sent message as sending')
+        self.version = MAX_MYSQL_INTEGER
+        self.is_draft = False
+        self.regenerate_nylas_uid()
 
     @property
     def categories_changes(self):
@@ -123,18 +154,18 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
     g_thrid = Column(BigInteger, nullable=True, index=True, unique=False)
 
     # The uid as set in the X-INBOX-ID header of a sent message we create
-    inbox_uid = Column(String(64), nullable=True, index=True)
+    nylas_uid = Column(String(64), nullable=True, index=True, name='inbox_uid')
 
-    def regenerate_inbox_uid(self):
+    def regenerate_nylas_uid(self):
         """
-        The value of inbox_uid is simply the draft public_id and version,
-        concatenated. Because the inbox_uid identifies the draft on the remote
+        The value of nylas_uid is simply the draft public_id and version,
+        concatenated. Because the nylas_uid identifies the draft on the remote
         provider, we regenerate it on each draft revision so that we can delete
         the old draft and add the new one on the remote."""
 
         from inbox.sendmail.message import generate_message_id_header
-        self.inbox_uid = '{}-{}'.format(self.public_id, self.version)
-        self.message_id_header = generate_message_id_header(self.inbox_uid)
+        self.nylas_uid = '{}-{}'.format(self.public_id, self.version)
+        self.message_id_header = generate_message_id_header(self.nylas_uid)
 
     categories = association_proxy(
         'messagecategories', 'category',
@@ -293,8 +324,14 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
             get_internaldate(parsed.headers.get('Date'),
                              parsed.headers.get('Received'))
 
-        # Custom Inbox header
-        self.inbox_uid = parsed.headers.get('X-INBOX-ID')
+        # It seems MySQL rounds up fractional seconds in a weird way,
+        # preventing us from reconciling messages correctly. See:
+        # https://github.com/nylas/sync-engine/commit/ed16b406e0a for
+        # more details.
+        self.received_date = self.received_date.replace(microsecond=0)
+
+        # Custom Nylas header
+        self.nylas_uid = parsed.headers.get('X-INBOX-ID')
 
         # In accordance with JWZ (http://www.jwz.org/doc/threading.html)
         self.references = parse_references(
@@ -520,8 +557,10 @@ class Message(MailSyncBase, HasRevisions, HasPublicID):
             Message.public_id == bindparam('public_id'),
             Message.namespace_id == bindparam('namespace_id'))
         q += lambda q: q.options(
-            joinedload(Message.thread).load_only('discriminator', 'public_id'),
-            joinedload(Message.messagecategories).joinedload('category'),
+            joinedload(Message.thread).
+            load_only('discriminator', 'public_id'),
+            joinedload(Message.messagecategories).
+            joinedload(MessageCategory.category),
             joinedload(Message.parts).joinedload('block'),
             joinedload(Message.events))
         return q(db_session).params(
@@ -569,20 +608,20 @@ Index('ix_message_namespace_id_message_id_header_subject',
 
 class MessageCategory(MailSyncBase):
     """ Mapping between messages and categories. """
-    message_id = Column(ForeignKey(Message.id, ondelete='CASCADE'),
-                        nullable=False)
+    message_id = Column(BigInteger, nullable=False)
     message = relationship(
         'Message',
+        primaryjoin='foreign(MessageCategory.message_id) == remote(Message.id)',  # noqa
         backref=backref('messagecategories',
                         collection_class=set,
-                        cascade='all, delete-orphan'))
+                        cascade="all, delete-orphan"))
 
-    category_id = Column(ForeignKey(Category.id, ondelete='CASCADE'),
-                         nullable=False)
+    category_id = Column(BigInteger, nullable=False)
     category = relationship(
         Category,
+        primaryjoin='foreign(MessageCategory.category_id) == remote(Category.id)',  # noqa
         backref=backref('messagecategories',
-                        cascade='all, delete-orphan',
+                        cascade="all, delete-orphan",
                         lazy='dynamic'))
 
     @property

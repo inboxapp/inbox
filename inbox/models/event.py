@@ -11,12 +11,14 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 
 from inbox.sqlalchemy_ext.util import MAX_TEXT_LENGTH, BigJSON, MutableList
 from inbox.models.base import MailSyncBase
-from inbox.models.mixins import HasPublicID, HasRevisions
+from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
+                                 DeletedAtMixin)
 from inbox.models.calendar import Calendar
 from inbox.models.namespace import Namespace
 from inbox.models.message import Message
 from inbox.models.when import Time, TimeSpan, Date, DateSpan
 from email.utils import parseaddr
+from inbox.util.encoding import unicode_truncate
 
 from nylas.logging import get_logger
 log = get_logger()
@@ -34,7 +36,9 @@ _LENGTHS = {'location': LOCATION_MAX_LEN,
             'raw_data': MAX_TEXT_LENGTH}
 EVENT_STATUSES = ["confirmed", "tentative", "cancelled"]
 
-time_parse = lambda x: arrow.get(x).to('utc').naive
+
+def time_parse(x):
+    return arrow.get(x).to('utc').naive
 
 
 class FlexibleDateTime(TypeDecorator):
@@ -64,7 +68,8 @@ class FlexibleDateTime(TypeDecorator):
         return x == y
 
 
-class Event(MailSyncBase, HasRevisions, HasPublicID):
+class Event(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
+            DeletedAtMixin):
     """Data for events."""
     API_OBJECT_NAME = 'event'
     API_MODIFIABLE_FIELDS = ['title', 'description', 'location',
@@ -140,7 +145,10 @@ class Event(MailSyncBase, HasRevisions, HasPublicID):
                'raw_data')
     def validate_length(self, key, value):
         max_len = _LENGTHS[key]
-        return value if value is None else value[:max_len]
+        if isinstance(value, unicode):
+            return value if value is None else unicode_truncate(value, max_len)
+        else:
+            return value if value is None else value[:max_len]
 
     @property
     def when(self):

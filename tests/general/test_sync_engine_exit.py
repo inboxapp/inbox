@@ -1,3 +1,4 @@
+# flake8: noqa: F401
 # test that we correctly exit a sync engine instance if the folder we are
 # trying to sync comes back as deleted while syncing
 
@@ -48,7 +49,7 @@ def test_folder_engine_exits_if_folder_missing(db, yahoo_account,
     db.session.delete(folder)
     db.session.commit()
     with pytest.raises(IntegrityError):
-        sync_engine_stub._load_state()
+        sync_engine_stub.update_folder_sync_status(lambda s: s)
 
     # and we should use this to signal that mailsync is done
     with pytest.raises(MailsyncDone):

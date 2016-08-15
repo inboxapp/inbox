@@ -1,3 +1,4 @@
+# flake8: noqa: F401, F811
 """Remove EASFolderSyncStatus + Folder rows for folders we never sync
 
 Revision ID: 2a748760ac63
@@ -9,7 +10,6 @@ Create Date: 2014-07-19 00:28:08.258857
 # revision identifiers, used by Alembic.
 revision = 'bb4f204f192'
 down_revision = '2a748760ac63'
-
 
 
 def upgrade():

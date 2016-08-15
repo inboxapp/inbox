@@ -12,8 +12,7 @@ down_revision = '3237b6b1ee03'
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
-from sqlalchemy.sql import table, column, text
+from sqlalchemy.sql import table, column
 from sqlalchemy.ext.declarative import declarative_base
 
 
@@ -65,15 +64,15 @@ def upgrade():
 
     for r in results:
         op.execute(
-          imapaccount.update().where(imapaccount.c.id==r[0]).values({
-            'family_name': r[1],
-            'google_id': r[2],
-            'g_plus_url': r[3],
-            'g_picture_url': r[4],
-            'g_gender': r[5],
-            'given_name': r[6],
-            'g_locale': r[7]
-          })
+            imapaccount.update().where(imapaccount.c.id == r[0]).values({
+                'family_name': r[1],
+                'google_id': r[2],
+                'g_plus_url': r[3],
+                'g_picture_url': r[4],
+                'g_gender': r[5],
+                'given_name': r[6],
+                'g_locale': r[7]
+            })
         )
 
     # DROP:
@@ -134,15 +133,15 @@ def downgrade():
 
     for r in results:
         op.execute(
-          account.update().where(account.c.id==r[0]).values({
-            'family_name': r[1],
-            'google_id': r[2],
-            'g_plus_url': r[3],
-            'g_picture_url': r[4],
-            'g_gender': r[5],
-            'given_name': r[6],
-            'g_locale': r[7]
-          })
+            account.update().where(account.c.id == r[0]).values({
+                'family_name': r[1],
+                'google_id': r[2],
+                'g_plus_url': r[3],
+                'g_picture_url': r[4],
+                'g_gender': r[5],
+                'given_name': r[6],
+                'g_locale': r[7]
+            })
         )
 
     # DROP:

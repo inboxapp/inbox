@@ -167,6 +167,10 @@ class ContactSearchClient(object):
 
 
 def index_namespace(namespace_id):
+    """ Backfill function to index a namespace from current db data Not used
+    for incremental indexing.
+
+    """
     if not search_service_url or not doc_service_url:
         raise Exception('CloudSearch not configured; cannot index')
     else:
@@ -175,7 +179,6 @@ def index_namespace(namespace_id):
 
         # Look up previously indexed data so we can delete any records which
         # have disappeared.
-        #
         previous_records = search_client.fetch_all_matching_ids()
 
         log.info("previous records", total=len(previous_records),
@@ -215,6 +218,7 @@ def index_namespace(namespace_id):
                 contentType='application/json')
 
         log.info("namespace index complete",
+                 namespace_id=namespace_id,
                  total_contacts_indexed=indexed,
                  total_contacts_deleted=len(deleted_records))
 

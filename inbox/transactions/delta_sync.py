@@ -3,7 +3,7 @@ import gevent
 import collections
 from datetime import datetime
 
-from sqlalchemy import asc, desc, func, bindparam
+from sqlalchemy import asc, desc, bindparam
 from inbox.api.kellogs import APIEncoder, encode
 from inbox.models import Transaction, Message, Thread, Account, Namespace
 from inbox.models.session import session_scope
@@ -74,12 +74,11 @@ def get_transaction_cursor_near_timestamp(namespace_id, timestamp, db_session):
 
 
 def _get_last_trx_id_for_namespace(namespace_id, db_session):
-    q = bakery(lambda session: session.query(func.max(Transaction.id)))
+    q = bakery(lambda session: session.query(Transaction.id))
     q += lambda q: q.filter(
-        Transaction.namespace_id == bindparam('namespace_id'),
-        Transaction.deleted_at.is_(None))
-    q += lambda q: q.with_hint(Transaction,
-                               'USE INDEX (namespace_id_deleted_at)')
+        Transaction.namespace_id == bindparam('namespace_id'))
+    q += lambda q: q.order_by(desc(Transaction.created_at)).\
+        order_by(desc(Transaction.id)).limit(1)
     return q(db_session).params(namespace_id=namespace_id).one()[0]
 
 
@@ -138,19 +137,10 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
         return ([], pointer)
 
     while True:
-        # deleted_at condition included to allow this query to be satisfied via
-        # the legacy index on (namespace_id, deleted_at) for performance.
-        # Also need to explicitly specify the index hint because the query
-        # planner is dumb as nails and otherwise would make this super slow for
-        # some values of namespace_id and pointer.
-        # TODO(emfree): Remove this hack and ensure that the right index (on
-        # namespace_id only) exists.
         transactions = db_session.query(Transaction). \
             filter(
                 Transaction.id > pointer,
-                Transaction.namespace_id == namespace.id,
-                Transaction.deleted_at.is_(None)). \
-            with_hint(Transaction, 'USE INDEX (namespace_id_deleted_at)')
+                Transaction.namespace_id == namespace.id)
 
         if exclude_types is not None:
             transactions = transactions.filter(

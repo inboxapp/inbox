@@ -12,7 +12,6 @@ down_revision = '54dcea22a268'
 
 from alembic import op
 from sqlalchemy.sql import text
-import sqlalchemy as sa
 
 
 def upgrade():
@@ -27,6 +26,7 @@ def upgrade():
     conn.execute(text("ALTER TABLE account ADD CONSTRAINT emailed_events_fk "
                       "FOREIGN KEY (emailed_events_calendar_id) REFERENCES "
                       "calendar(id) ON DELETE SET NULL"))
+
 
 def downgrade():
     conn = op.get_bind()

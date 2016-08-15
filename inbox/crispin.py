@@ -1,4 +1,4 @@
-""" IMAPClient wrapper for the Nylas Sync Engine. """
+""" IMAPClient wrapper for the Nylas Sync Engine."""
 import contextlib
 import re
 import time
@@ -40,10 +40,12 @@ from inbox.models.session import session_scope
 from inbox.models.backends.imap import ImapAccount
 from inbox.models.backends.generic import GenericAccount
 from inbox.models.backends.gmail import GmailAccount
+from inbox.folder_edge_cases import localized_folder_names
 from nylas.logging import get_logger
 log = get_logger()
 
 __all__ = ['CrispinClient', 'GmailCrispinClient']
+
 
 # Unify flags API across IMAP and Gmail
 Flags = namedtuple('Flags', 'flags modseq')
@@ -69,12 +71,12 @@ CONN_RETRY_EXC_CLASSES = CONN_NETWORK_EXC_CLASSES + (imaplib.IMAP4.error,)
 
 # Exception classes on which connections should be discarded.
 CONN_DISCARD_EXC_CLASSES = CONN_NETWORK_EXC_CLASSES +  \
-                           (ssl.CertificateError, imaplib.IMAP4.error)
+    (ssl.CertificateError, imaplib.IMAP4.error)
 
 # Exception classes which indicate the IMAP connection has become
 # unusable.
 CONN_UNUSABLE_EXC_CLASSES = CONN_NETWORK_EXC_CLASSES + \
-                            (ssl.CertificateError, imaplib.IMAP4.abort)
+    (ssl.CertificateError, imaplib.IMAP4.abort)
 
 
 class FolderMissingError(Exception):
@@ -144,6 +146,18 @@ class CrispinConnectionPool(object):
         self._sem = BoundedSemaphore(num_connections)
         self._set_account_info()
 
+    def _should_timeout_connection(self):
+        # Writable pools don't need connection timeouts because
+        # SyncbackBatchTasks properly scope the IMAP connection across its
+        # constituent SyncbackTasks.
+        return self.readonly
+
+    def _logout(self, client):
+        try:
+            client.logout()
+        except Exception:
+            log.info('Error on IMAP logout', exc_info=True)
+
     @contextlib.contextmanager
     def get(self):
         """ Get a connection from the pool, or instantiate a new one if needed.
@@ -162,6 +176,10 @@ class CrispinConnectionPool(object):
             if client is None:
                 client = self._new_connection()
             yield client
+
+            if not self._should_timeout_connection():
+                self._logout(client)
+                client = None
         except CONN_DISCARD_EXC_CLASSES as exc:
             # Discard the connection on socket or IMAP errors. Technically this
             # isn't always necessary, since if you got e.g. a FETCH failure you
@@ -171,10 +189,7 @@ class CrispinConnectionPool(object):
                      exc_info=True)
             if client is not None and \
                not isinstance(exc, CONN_UNUSABLE_EXC_CLASSES):
-                try:
-                    client.logout()
-                except Exception:
-                    log.info('Error on IMAP logout', exc_info=True)
+                self._logout(client)
             client = None
             raise exc
         except:
@@ -205,10 +220,12 @@ class CrispinConnectionPool(object):
                     self.account_id)
             else:
                 account = db_session.query(GenericAccount).options(
-                    joinedload(GenericAccount.imap_secret)).get(self.account_id)
+                    joinedload(GenericAccount.imap_secret)
+                ).get(self.account_id)
             db_session.expunge(account)
 
-        return self.auth_handler.connect_account(account)
+        return self.auth_handler.connect_account(
+            account, self._should_timeout_connection())
 
     def _new_connection(self):
         conn = self._new_raw_connection()
@@ -217,7 +234,7 @@ class CrispinConnectionPool(object):
                                readonly=self.readonly)
 
 
-def _exc_callback():
+def _exc_callback(exc):
     log.info('Connection broken with error; retrying with new connection',
              exc_info=True)
     gevent.sleep(5)
@@ -231,15 +248,15 @@ class CrispinClient(object):
     """
     Generic IMAP client wrapper.
 
-    One thing to note about crispin clients is that *all* calls operate on
-    the currently selected folder.
+    Generally, crispin client calls operate on the currently selected folder.
+    There are some specific calls which may change the selected folder as a
+    part of their work and may leave it selected at the end of the call, since
+    folder selects are expensive in IMAP. These methods are called out in
+    their docstrings.
 
-    Crispin will NEVER implicitly select a folder for you.
-
-    This is very important! IMAP only guarantees that folder message UIDs
-    are valid for a "session", which is defined as from the time you
-    SELECT a folder until the connection is closed or another folder is
-    selected.
+    IMAP only guarantees that folder message UIDs are valid for a "session",
+    which is defined as from the time you SELECT a folder until the connection
+    is closed or another folder is selected.
 
     Crispin clients *always* return long ints rather than strings for number
     data types, such as message UIDs, Google message IDs, and Google thread
@@ -255,6 +272,10 @@ class CrispinClient(object):
     ----------
     account_id : int
         Database id of the associated IMAPAccount.
+    provider_info: dict
+        Provider info from inbox/providers.py
+    email_address: str
+        Email address associated with the account.
     conn : IMAPClient
         Open IMAP connection (should be already authed).
     readonly : bool
@@ -292,6 +313,26 @@ class CrispinClient(object):
         (flags, delimiter, name) tuples.
         """
         return self.conn.list_folders()
+
+    def select_folder_if_necessary(self, folder, uidvalidity_cb):
+        """ Selects a given folder if it isn't already the currently selected
+        folder.
+
+        Makes sure to set the 'selected_folder' attribute to a
+        (folder_name, select_info) pair.
+
+        Selecting a folder indicates the start of an IMAP session.  IMAP UIDs
+        are only guaranteed valid for sessions, so the caller must provide a
+        callback that checks UID validity.
+
+        If the folder is already the currently selected folder then we don't
+        reselect the folder which in turn won't initiate a new session, so if
+        you care about having a non-stale value for HIGHESTMODSEQ then don't
+        use this function.
+        """
+        if self.selected_folder is None or folder != self.selected_folder[0]:
+            return self.select_folder(folder, uidvalidity_cb)
+        return uidvalidity_cb(self.account_id, folder, self.selected_folder[1])
 
     def select_folder(self, folder, uidvalidity_cb):
         """ Selects a given folder.
@@ -348,11 +389,24 @@ class CrispinClient(object):
         return or_none(self.selected_folder_info, lambda i: i.get('UIDNEXT'))
 
     @property
-    def folder_delimiter(self):
-        folders = self._fetch_folder_list()
-        _, delimiter, __ = folders[0]
+    def folder_separator(self):
+        # We use the list command because it works for most accounts.
+        folders_list = self.conn.list_folders()
 
-        return delimiter
+        if len(folders_list) == 0:
+            return '.'
+
+        return folders_list[0][1]
+
+    @property
+    def folder_prefix(self):
+        # Unfortunately, some servers don't support the NAMESPACE command.
+        # In this case, assume that there's no folder prefix.
+        if self.conn.has_capability('NAMESPACE'):
+            folder_prefix, folder_separator = self.conn.namespace()[0][0]
+            return folder_prefix
+        else:
+            return ''
 
     def sync_folders(self):
         """
@@ -424,6 +478,9 @@ class CrispinClient(object):
         """
         raw_folders = []
 
+        # Folders that provide basic functionality of email
+        system_role_names = ['inbox', 'sent', 'trash', 'spam']
+
         folders = self._fetch_folder_list()
         for flags, delimiter, name in folders:
             if u'\\Noselect' in flags or u'\\NoSelect' in flags \
@@ -434,7 +491,63 @@ class CrispinClient(object):
             raw_folder = self._process_folder(name, flags)
             raw_folders.append(raw_folder)
 
+        # Check to see if we have to guess the roles for any system role
+        missing_roles = self._get_missing_roles(raw_folders,
+                                                system_role_names)
+        guessed_roles = [self._guess_role(folder.display_name)
+                         for folder in raw_folders]
+
+        for role in missing_roles:
+            if guessed_roles.count(role) == 1:
+                guess_index = guessed_roles.index(role)
+                raw_folders[guess_index] = RawFolder(
+                    display_name=raw_folders[guess_index].display_name,
+                    role=role)
+
         return raw_folders
+
+    def _get_missing_roles(self, folders, roles):
+        '''
+        Given a list of folders, and a list of roles, returns a list
+        a list of roles that did not appear in the list of folders
+
+        Parameters:
+            folders: List of RawFolder objects
+        roles: list of role strings
+
+        Returns:
+            a list of roles that did not appear as a role in folders
+        '''
+
+        assert len(folders) > 0
+        assert len(roles) > 0
+
+        missing_roles = {role: "" for role in roles}
+        for folder in folders:
+            # if role is in missing_roles, then we lied about it being missing
+            if folder.role in missing_roles:
+                del missing_roles[folder.role]
+
+        return missing_roles.keys()
+
+    def _guess_role(self, folder):
+        '''
+        Given a folder, guess the system role that corresponds to that folder
+
+        Parameters:
+            folder: string representing the folder in question
+
+        Returns:
+            string representing role that most likely correpsonds to folder
+        '''
+        # localized_folder_names is an external map of folders we have seen
+        # in the wild with implicit roles that we were unable to determine
+        # because they had missing flags. We've manually gone through the
+        # folders and assigned them roles. When we find a folder we weren't
+        # able to assign a role, we add it to that map
+        for role in localized_folder_names:
+            if folder in localized_folder_names[role]:
+                return role
 
     def _process_folder(self, display_name, flags):
         """
@@ -458,6 +571,7 @@ class CrispinClient(object):
             'spam': 'spam',
             'archive': 'archive',
             'sent': 'sent',
+            'sent items': 'sent',
             'trash': 'trash'}
 
         # Additionally we provide a custom mapping for providers that
@@ -595,21 +709,21 @@ class CrispinClient(object):
 
     def delete_uids(self, uids):
         uids = [str(u) for u in uids]
-        self.conn.delete_messages(uids)
+        self.conn.delete_messages(uids, silent=True)
         self.conn.expunge()
 
     def set_starred(self, uids, starred):
         if starred:
-            self.conn.add_flags(uids, ['\\Flagged'])
+            self.conn.add_flags(uids, ['\\Flagged'], silent=True)
         else:
-            self.conn.remove_flags(uids, ['\\Flagged'])
+            self.conn.remove_flags(uids, ['\\Flagged'], silent=True)
 
     def set_unread(self, uids, unread):
         uids = [str(u) for u in uids]
         if unread:
-            self.conn.remove_flags(uids, ['\\Seen'])
+            self.conn.remove_flags(uids, ['\\Seen'], silent=True)
         else:
-            self.conn.add_flags(uids, ['\\Seen'])
+            self.conn.add_flags(uids, ['\\Seen'], silent=True)
 
     def save_draft(self, message, date=None):
         assert self.selected_folder_name in self.folder_names()['drafts'], \
@@ -665,15 +779,38 @@ class CrispinClient(object):
 
         return results
 
+    def delete_sent_message(self, message_id_header, delete_multiple=False):
+        """
+        Delete a message in the sent folder, as identified by the Message-Id
+        header. We first delete the message from the Sent folder, and then
+        also delete it from the Trash folder if necessary.
+
+        Leaves the Trash folder selected at the end of the method.
+
+        """
+        log.info('Trying to delete sent message',
+                 message_id_header=message_id_header)
+        sent_folder_name = self.folder_names()['sent'][0]
+        self.conn.select_folder(sent_folder_name)
+        msg_deleted = self._delete_message(message_id_header, delete_multiple)
+        if msg_deleted:
+            trash_folder_name = self.folder_names()['trash'][0]
+            self.conn.select_folder(trash_folder_name)
+            self._delete_message(message_id_header, delete_multiple)
+        return msg_deleted
+
     def delete_draft(self, message_id_header):
         """
         Delete a draft, as identified by its Message-Id header. We first delete
         the message from the Drafts folder,
         and then also delete it from the Trash folder if necessary.
 
+        Leaves the Trash folder selected at the end of the method.
+
         """
-        log.info('Trying to delete draft', message_id_header=message_id_header)
         drafts_folder_name = self.folder_names()['drafts'][0]
+        log.info('Trying to delete draft',
+                 message_id_header=message_id_header, folder=drafts_folder_name)
         self.conn.select_folder(drafts_folder_name)
         draft_deleted = self._delete_message(message_id_header)
         if draft_deleted:
@@ -682,7 +819,7 @@ class CrispinClient(object):
             self._delete_message(message_id_header)
         return draft_deleted
 
-    def _delete_message(self, message_id_header):
+    def _delete_message(self, message_id_header, delete_multiple=False):
         """
         Delete a message from the selected folder, using the Message-Id header
         to locate it. Does nothing if no matching messages are found, or if
@@ -694,12 +831,12 @@ class CrispinClient(object):
             log.error('No remote messages found to delete',
                       message_id_header=message_id_header)
             return False
-        if len(matching_uids) > 1:
+        if len(matching_uids) > 1 and not delete_multiple:
             log.error('Multiple remote messages found to delete',
                       message_id_header=message_id_header,
                       uids=matching_uids)
             return False
-        self.conn.delete_messages(matching_uids)
+        self.conn.delete_messages(matching_uids, silent=True)
         self.conn.expunge()
         return True
 
@@ -722,7 +859,8 @@ class CrispinClient(object):
     def condstore_changed_flags(self, modseq):
         data = self.conn.fetch('1:*', ['FLAGS'],
                                modifiers=['CHANGEDSINCE {}'.format(modseq)])
-        return {uid: Flags(ret['FLAGS'], ret['MODSEQ'][0] if 'MODSEQ' in ret else None)
+        return {uid: Flags(ret['FLAGS'], ret['MODSEQ'][0]
+                           if 'MODSEQ' in ret else None)
                 for uid, ret in data.items()}
 
 
@@ -749,7 +887,8 @@ class GmailCrispinClient(CrispinClient):
             raise GmailSettingError(
                 "Account {} is missing the 'All Mail' folder. This is "
                 "probably due to 'Show in IMAP' being disabled. "
-                "See https://support.nylas.com/hc/en-us/articles/217562277 for more details."
+                "See https://support.nylas.com/hc/en-us/articles/217562277 "
+                "for more details."
                 .format(self.email_address))
 
         # If the account has Trash, Spam folders, sync those too.
@@ -840,30 +979,6 @@ class GmailCrispinClient(CrispinClient):
                 self._folder_names[f.role].append(f.display_name)
 
         return self._folder_names
-
-    def folders(self):
-        """
-        Fetch the list of folders for the account from the remote, return as a
-        list of RawFolder objects.
-
-        NOTE:
-        Always fetches the list of folders from the remote.
-
-        """
-        raw_folders = []
-
-        folders = self._fetch_folder_list()
-        for flags, delimiter, name in folders:
-            if u'\\Noselect' in flags or u'\\NoSelect' in flags \
-                    or u'\\NonExistent' in flags:
-                # Special folders that can't contain messages, usually
-                # just '[Gmail]'
-                continue
-
-            raw_folder = self._process_folder(name, flags)
-            raw_folders.append(raw_folder)
-
-        return raw_folders
 
     def _process_folder(self, display_name, flags):
         """
@@ -961,3 +1076,70 @@ class GmailCrispinClient(CrispinClient):
 
     def _decode_labels(self, labels):
         return map(imapclient.imap_utf7.decode, labels)
+
+    def delete_draft(self, message_id_header):
+        """
+        Delete a message in the drafts folder, as identified by the Message-Id
+        header. This overrides the parent class's method because gmail has
+        weird delete semantics: to delete a message from a "folder" (actually a
+        label) besides Trash or Spam, you must copy it to the trash. Issuing a
+        delete command will only remove the label. So here we first copy the
+        message from the draft folder to Trash, and then also delete it from the
+        Trash folder to permanently delete it.
+
+        Leaves the Trash folder selected at the end of the method.
+        """
+
+        log.info('Trying to delete gmail draft',
+                 message_id_header=message_id_header)
+        drafts_folder_name = self.folder_names()['drafts'][0]
+        trash_folder_name = self.folder_names()['trash'][0]
+
+        # First find the draft in the drafts folder
+        self.conn.select_folder(drafts_folder_name)
+        matching_uids = self.find_by_header('Message-Id', message_id_header)
+        if not matching_uids:
+            return False
+
+        # To delete, first copy the message to trash (sufficient to move from
+        # gmail's All Mail folder to Trash folder)
+        self.conn.copy(matching_uids, trash_folder_name)
+
+        # Next, delete the message from trash (in the normal way) to permanently
+        # delete it.
+        self.conn.select_folder(trash_folder_name)
+        self._delete_message(message_id_header, False)
+        return True
+
+    def delete_sent_message(self, message_id_header, delete_multiple=False):
+        """
+        Delete a message in the sent folder, as identified by the Message-Id
+        header. This overrides the parent class's method because gmail has
+        weird delete semantics: to delete a message from a "folder" (actually a
+        label) besides Trash or Spam, you must copy it to the trash. Issuing a
+        delete command will only remove the label. So here we first copy the
+        message from the Sent folder to Trash, and then also delete it from the
+        Trash folder to permanently delete it.
+
+        Leaves the Trash folder selected at the end of the method.
+
+        """
+        log.info('Trying to delete sent message',
+                 message_id_header=message_id_header)
+        sent_folder_name = self.folder_names()['sent'][0]
+        trash_folder_name = self.folder_names()['trash'][0]
+        # First find the message in Sent
+        self.conn.select_folder(sent_folder_name)
+        matching_uids = self.find_by_header('Message-Id', message_id_header)
+        if not matching_uids:
+            return False
+
+        # To delete, first copy the message to trash (sufficient to move from
+        # gmail's All Mail folder to Trash folder)
+        self.conn.copy(matching_uids, trash_folder_name)
+
+        # Next, select delete the message from trash (in the normal way) to
+        # permanently delete it.
+        self.conn.select_folder(trash_folder_name)
+        self._delete_message(message_id_header, delete_multiple)
+        return True

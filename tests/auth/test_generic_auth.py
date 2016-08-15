@@ -7,7 +7,7 @@ import pytest
 from inbox.util.url import parent_domain
 from inbox.models.account import Account
 from inbox.auth.generic import GenericAuthHandler
-from inbox.basicauth import UserRecoverableConfigError, ValidationError
+from inbox.basicauth import SettingUpdateError, ValidationError
 
 
 settings = {
@@ -45,6 +45,9 @@ def test_create_account(db):
     account = db.session.query(Account).get(id_)
     assert account.imap_endpoint == (imap_host, imap_port)
     assert account.smtp_endpoint == (smtp_host, smtp_port)
+    # Ensure that the emailed events calendar was created
+    assert account._emailed_events_calendar is not None
+    assert account._emailed_events_calendar.name == 'Emailed events'
 
 
 def test_update_account(db):
@@ -74,7 +77,7 @@ def test_update_account(db):
     # Invalid updates
     for (attr, value, updated_settings) in generate_endpoint_updates(settings):
         assert value in updated_settings['settings'].values()
-        with pytest.raises(UserRecoverableConfigError):
+        with pytest.raises(SettingUpdateError):
             account = handler.update_account(account, updated_settings['settings'])
         db.session.add(account)
         db.session.commit()
@@ -125,17 +128,78 @@ def test_update_account_with_different_subdomain(db, monkeypatch):
     assert account._smtp_server_host == 'mail.office365.com'
 
 
-def test_double_auth(db):
+def test_update_account_when_no_server_provided(db):
+    email = settings['settings']['email']
+    imap_host = settings['settings']['imap_server_host']
+    imap_port = settings['settings']['imap_server_port']
+    smtp_host = settings['settings']['smtp_server_host']
+    smtp_port = settings['settings']['smtp_server_port']
+
+    handler = GenericAuthHandler(settings['provider'])
+
+    account = handler.create_account(email, settings['settings'])
+    # On successful auth, the account's imap_server is stored.
+    db.session.add(account)
+    db.session.commit()
+    id_ = account.id
+    db.session.commit()
+
+    # Valid updates:
+    # A future authentication does not include the `imap_server_host` either.
+    db.session.expire(account)
+    account = db.session.query(Account).get(id_)
+
+    updated_settings = copy.deepcopy(settings)
+    del updated_settings['settings']['imap_server_host']
+    del updated_settings['settings']['smtp_server_host']
+
+    account = handler.update_account(account, updated_settings['settings'])
+    db.session.add(account)
+    db.session.commit()
+    account = db.session.query(Account).get(id_)
+    acc_imap_host, acc_imap_port = account.imap_endpoint
+    assert acc_imap_host == imap_host
+    assert acc_imap_port == imap_port
+
+    acc_smtp_host, acc_smtp_port = account.smtp_endpoint
+    assert acc_smtp_host == smtp_host
+    assert acc_smtp_port == smtp_port
+
+    # A future authentication has the `imap_server_host=''
+    # and smtp_server_host=''`.
+    # This is what happens in the legacy auth flow, since
+    # Proposal.imap_server_host and smtp_server_host will be set to u''
+    # if not provided.
+    db.session.expire(account)
+    account = db.session.query(Account).get(id_)
+    updated_settings['settings']['imap_server_host'] = u''
+    updated_settings['settings']['smtp_server_host'] = u''
+    account = handler.update_account(account, updated_settings['settings'])
+    db.session.add(account)
+    db.session.commit()
+    account = db.session.query(Account).get(id_)
+    acc_imap_host, acc_imap_port = account.imap_endpoint
+    assert acc_imap_host == imap_host
+    assert acc_imap_port == imap_port
+
+    acc_smtp_host, acc_smtp_port = account.smtp_endpoint
+    assert acc_smtp_host == smtp_host
+    assert acc_smtp_port == smtp_port
+
+
+@pytest.mark.usefixtures('mock_smtp_get_connection')
+def test_double_auth(db, mock_auth_imapclient):
     settings = {
         'provider': 'yahoo',
         'settings': {
             'name': 'Y.Y!',
             'locale': 'fr',
-            'email': 'cypresstest@yahoo.com',
-            'password': 'IHate2Gmail'}
+            'email': 'benbitdiddle1861@yahoo.com',
+            'password': 'EverybodyLovesIMAPv4'}
     }
     email = settings['settings']['email']
     password = settings['settings']['password']
+    mock_auth_imapclient._add_login(email, password)
 
     handler = GenericAuthHandler(settings['provider'])
 
@@ -187,16 +251,19 @@ def test_parent_domain():
     assert parent_domain('company.co.uk') != parent_domain('evilcompany.co.uk')
 
 
-def test_successful_reauth_resets_sync_state(db):
+@pytest.mark.usefixtures('mock_smtp_get_connection')
+def test_successful_reauth_resets_sync_state(db, mock_auth_imapclient):
     settings = {
         'provider': 'yahoo',
         'settings': {
             'name': 'Y.Y!',
             'locale': 'fr',
-            'email': 'cypresstest@yahoo.com',
-            'password': 'IHate2Gmail'}
+            'email': 'benbitdiddle1861@yahoo.com',
+            'password': 'EverybodyLovesIMAPv4'}
     }
     email = settings['settings']['email']
+    password = settings['settings']['password']
+    mock_auth_imapclient._add_login(email, password)
     handler = GenericAuthHandler(settings['provider'])
 
     account = handler.create_account(email, settings['settings'])

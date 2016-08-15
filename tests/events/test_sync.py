@@ -1,8 +1,8 @@
+# flake8: noqa: F401
 from datetime import datetime
 from inbox.events.remote_sync import EventSync
 from inbox.events.util import CalendarSyncResponse
 from inbox.models import Calendar, Event, Transaction
-from tests.util.base import new_account
 
 
 # Placeholder values for non-nullable attributes
@@ -32,9 +32,9 @@ def calendar_response():
 
 def calendar_response_with_update():
     return CalendarSyncResponse(
-                [], [Calendar(name='Super Important Meetings',
-                     uid='first_calendar_uid',
-                     read_only=False)])
+        [], [Calendar(name='Super Important Meetings',
+                      uid='first_calendar_uid',
+                      read_only=False)])
 
 
 def calendar_response_with_delete():
@@ -78,10 +78,10 @@ def event_response_with_delete(calendar_uid, sync_from_time):
                       **default_params)]
 
 
-def test_handle_changes(db, new_account):
-    namespace_id = new_account.namespace.id
-    event_sync = EventSync(new_account.email_address, 'google', new_account.id,
-                           namespace_id)
+def test_handle_changes(db, generic_account):
+    namespace_id = generic_account.namespace.id
+    event_sync = EventSync(generic_account.email_address, 'google', 
+                           generic_account.id, namespace_id)
 
     # Sync calendars/events
     event_sync.provider.sync_calendars = calendar_response

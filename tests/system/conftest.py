@@ -2,12 +2,12 @@
 import os
 import platform
 
-API_BASE = "http://%s:%s" % (os.getenv("API_PORT_5555_TCP_ADDR","localhost"),os.getenv("API_PORT_5555_TCP_PORT","5555"))
+API_BASE = "http://%s:%s" % (os.getenv("API_PORT_5555_TCP_ADDR", "localhost"), os.getenv("API_PORT_5555_TCP_PORT", "5555"))
 TEST_MAX_DURATION_SECS = 360
 TEST_GRANULARITY_CHECK_SECS = 0.1
 
 from time import time, sleep
-from client import InboxTestClient
+from client import NylasTestClient
 from inbox.util.url import provider_from_address
 from google_auth_helper import google_auth
 from outlook_auth_helper import outlook_auth
@@ -19,14 +19,14 @@ from inbox.auth.base import handler_from_provider
 try:
     from accounts import credentials as raw_credentials
     credentials = [(c['user'], c['password']) for c in raw_credentials]
-    all_accounts = [InboxTestClient(email, API_BASE) for email, _ in credentials]
-    gmail_accounts = [InboxTestClient(email, API_BASE)
+    all_accounts = [NylasTestClient(email, API_BASE) for email, _ in credentials]
+    gmail_accounts = [NylasTestClient(email, API_BASE)
                       for email, password in credentials
                       if "gmail.com" in email or
                          "inboxapp.com" in email]
 
     calendar_providers = ["gmail.com", "onmicrosoft.com"]
-    calendar_accounts = [InboxTestClient(email, API_BASE)
+    calendar_accounts = [NylasTestClient(email, API_BASE)
                          for email, password in credentials
                          if any(domain in email for domain in calendar_providers)]
 

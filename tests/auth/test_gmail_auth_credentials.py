@@ -109,6 +109,7 @@ def account_with_single_auth_creds(db):
 @pytest.fixture
 def patch_access_token_getter(monkeypatch):
     class TokenGenerator:
+
         def __init__(self):
             self.revoked_refresh_tokens = []
             self.connection_error_tokens = []
@@ -339,7 +340,7 @@ def test_get_account(db):
 
     assert len(account.auth_credentials) == 2
     auth_creds = next((creds for creds in account.auth_credentials
-                      if creds.refresh_token == token_2), False)
+                       if creds.refresh_token == token_2), False)
     assert auth_creds
     assert auth_creds.client_id == client_id_2
     assert auth_creds.client_secret == client_secret_2

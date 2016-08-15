@@ -9,11 +9,12 @@ log = get_logger()
 
 from inbox.auth.base import AuthHandler, account_or_none
 from inbox.basicauth import (ValidationError, UserRecoverableConfigError,
-                             SSLNotSupportedError)
+                             SSLNotSupportedError, SettingUpdateError)
 from inbox.models import Namespace
 from inbox.models.backends.generic import GenericAccount
 from inbox.sendmail.smtp.postel import SMTPClient
 from inbox.util.url import matching_subdomains
+from inbox.crispin import CrispinClient
 
 PROVIDER = 'generic'
 AUTH_HANDLER_CLS = 'GenericAuthHandler'
@@ -46,6 +47,8 @@ class GenericAuthHandler(AuthHandler):
                                      response['imap_server_port'])
             account.smtp_endpoint = (response['smtp_server_host'],
                                      response['smtp_server_port'])
+
+        account.create_emailed_events_calendar()
 
         # Shim for back-compatability with legacy auth
         # The old API does NOT send these but authentication now uses them
@@ -88,14 +91,12 @@ class GenericAuthHandler(AuthHandler):
             for attribute in ('imap_server_host', 'smtp_server_host'):
                 old_value = getattr(account, '_{}'.format(attribute), None)
                 new_value = response.get(attribute)
-                if (new_value is not None and old_value is not None and
-                        new_value != old_value):
-
+                if (new_value and old_value and new_value != old_value):
                     # Before updating the domain name, check if:
                     # 1/ they have the same parent domain
                     # 2/ they direct to the same IP.
                     if not matching_subdomains(new_value, old_value):
-                        raise UserRecoverableConfigError(
+                        raise SettingUpdateError(
                             "Updating the IMAP/SMTP servers is not permitted. Please "
                             "verify that the server names you entered are correct. "
                             "If your IMAP/SMTP server has in fact changed, please "
@@ -111,7 +112,7 @@ class GenericAuthHandler(AuthHandler):
         account.enable_sync()
         return account
 
-    def connect_account(self, account):
+    def connect_account(self, account, use_timeout=True):
         """
         Returns an authenticated IMAP connection for the given account.
 
@@ -126,7 +127,8 @@ class GenericAuthHandler(AuthHandler):
         host, port = account.imap_endpoint
         ssl_required = account.ssl_required
         try:
-            conn = create_imap_connection(host, port, ssl_required)
+            conn = create_imap_connection(host, port, ssl_required,
+                                          use_timeout)
         except (IMAPClient.Error, socket.error) as exc:
             log.error('Error instantiating IMAP connection',
                       account_id=account.id,
@@ -209,6 +211,8 @@ class GenericAuthHandler(AuthHandler):
         """
         # Verify IMAP login
         conn = self.connect_account(account)
+        crispin = CrispinClient(account.id, account.provider_info,
+                                account.email_address, conn)
 
         info = account.provider_info
         if "condstore" not in info:
@@ -216,6 +220,8 @@ class GenericAuthHandler(AuthHandler):
                 account.supports_condstore = True
         try:
             conn.list_folders()
+            account.folder_separator = crispin.folder_separator
+            account.folder_prefix = crispin.folder_prefix
         except Exception as e:
             log.error("account_folder_list_failed",
                       email=account.email_address,
@@ -331,7 +337,7 @@ def _auth_is_invalid(exc):
                AUTH_INVALID_PREFIXES)
 
 
-def create_imap_connection(host, port, ssl_required):
+def create_imap_connection(host, port, ssl_required, use_timeout=True):
     """
     Return a connection to the IMAP server.
     The connection is encrypted if the specified port is the default IMAP
@@ -341,11 +347,12 @@ def create_imap_connection(host, port, ssl_required):
 
     """
     use_ssl = port == 993
+    timeout = 120 if use_timeout else None
 
     # TODO: certificate pinning for well known sites
     context = create_default_context()
     conn = IMAPClient(host, port=port, use_uid=True,
-                      ssl=use_ssl, ssl_context=context, timeout=120)
+                      ssl=use_ssl, ssl_context=context, timeout=timeout)
 
     if not use_ssl:
         # If STARTTLS is available, always use it. If it's not/ it fails, use

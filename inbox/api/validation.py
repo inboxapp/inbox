@@ -4,8 +4,10 @@ from arrow.parser import ParserError
 from flanker.addresslib import address
 from flask.ext.restful import reqparse
 from sqlalchemy.orm.exc import NoResultFound
+
 from inbox.models import Calendar, Thread, Block, Message, Category, Event
 from inbox.models.when import parse_as_when
+from inbox.models.category import EPOCH
 from inbox.models.constants import MAX_INDEXABLE_LENGTH
 from inbox.api.err import (InputError, NotFoundError, ConflictError,
                            AccountInvalidError, AccountStoppedError)
@@ -136,6 +138,22 @@ def strict_parse_args(parser, raw_args):
     return args
 
 
+def get_sending_draft(draft_public_id, namespace_id, db_session):
+    valid_public_id(draft_public_id)
+    try:
+        draft = db_session.query(Message).filter(
+            Message.public_id == draft_public_id,
+            Message.namespace_id == namespace_id).one()
+    except NoResultFound:
+        raise NotFoundError("Couldn't find multi-send draft {}"
+                            .format(draft_public_id))
+
+    if draft.is_sent or not draft.is_sending:
+        raise InputError('Message {} is not a multi-send draft'
+                         .format(draft_public_id))
+    return draft
+
+
 def get_draft(draft_public_id, version, namespace_id, db_session):
     valid_public_id(draft_public_id)
     if version is None:
@@ -233,18 +251,6 @@ def get_calendar(calendar_public_id, namespace, db_session):
                    Calendar.namespace_id == namespace.id).one()
     except NoResultFound:
         raise NotFoundError('Calendar {} not found'.format(calendar_public_id))
-
-
-def get_event(event_public_id, namespace_id, db_session):
-    valid_public_id(event_public_id)
-    try:
-        event = db_session.query(Event).filter(
-            Event.namespace_id == namespace_id,
-            Event.public_id == event_public_id).one()
-    except NoResultFound:
-        raise NotFoundError("Couldn't find event "
-                            "id {0}".format(event_public_id))
-    return event
 
 
 def valid_when(when):
@@ -388,7 +394,9 @@ def valid_display_name(namespace_id, category_type, display_name, db_session):
 
     if db_session.query(Category).filter(
             Category.namespace_id == namespace_id,
-            Category.lowercase_name == display_name).first() is not None:
+            Category.lowercase_name == display_name,
+            Category.type_ == category_type,
+            Category.deleted_at == EPOCH).first() is not None:
         raise InputError('{} with name "{}" already exists'.format(
                          category_type, display_name))
 

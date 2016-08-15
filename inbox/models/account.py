@@ -9,7 +9,8 @@ from sqlalchemy.sql.expression import false
 from inbox.sqlalchemy_ext.util import JSON, MutableDict, bakery
 
 from inbox.models.mixins import (HasPublicID, HasEmailAddress, HasRunState,
-                                 HasRevisions)
+                                 HasRevisions, UpdatedAtMixin,
+                                 DeletedAtMixin)
 from inbox.models.base import MailSyncBase
 from inbox.models.calendar import Calendar
 from inbox.providers import provider_info
@@ -20,7 +21,7 @@ from inbox.providers import provider_info
 # GmailAccount
 
 class Account(MailSyncBase, HasPublicID, HasEmailAddress, HasRunState,
-              HasRevisions):
+              HasRevisions, UpdatedAtMixin, DeletedAtMixin):
     API_OBJECT_NAME = 'account'
 
     @property
@@ -193,6 +194,9 @@ class Account(MailSyncBase, HasPublicID, HasEmailAddress, HasRunState,
         self._sync_status['sync_start_time'] = current_time
         self._sync_status['sync_end_time'] = None
         self._sync_status['sync_error'] = None
+        self._sync_status['sync_disabled_reason'] = None
+        self._sync_status['sync_disabled_on'] = None
+        self._sync_status['sync_disabled_by'] = None
 
         self.sync_state = 'running'
 
@@ -232,16 +236,23 @@ class Account(MailSyncBase, HasPublicID, HasEmailAddress, HasRunState,
         self.disable_sync('account deleted')
         self.sync_state = 'stopped'
 
-    def sync_stopped(self, reason=None):
+    def sync_stopped(self, requesting_host):
         """
         Record transition to stopped state. Should be called after the
         sync is actually stopped, not when the request to stop it is made.
 
         """
-        if self.sync_state == 'running':
-            self.sync_state = 'stopped'
-        self.sync_host = None
-        self._sync_status['sync_end_time'] = datetime.utcnow()
+        if requesting_host == self.sync_host:
+            # Perform a compare-and-swap before updating these values.
+            # Only if the host requesting to update the account.sync_* attributes
+            # here still owns the account sync (i.e is account.sync_host),
+            # the request can proceed.
+            self.sync_host = None
+            if self.sync_state == 'running':
+                self.sync_state = 'stopped'
+            self._sync_status['sync_end_time'] = datetime.utcnow()
+            return True
+        return False
 
     @classmethod
     def get(cls, id_, session):

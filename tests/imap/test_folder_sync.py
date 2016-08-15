@@ -1,3 +1,4 @@
+# flake8: noqa: F401, F811
 import pytest
 from hashlib import sha256
 from gevent.lock import BoundedSemaphore
@@ -5,8 +6,10 @@ from sqlalchemy.orm.exc import ObjectDeletedError
 from inbox.models import Folder, Message
 from inbox.models.backends.imap import (ImapFolderSyncStatus, ImapUid,
                                         ImapFolderInfo)
-from inbox.mailsync.backends.imap.generic import (FolderSyncEngine, UidInvalid)
+from inbox.mailsync.backends.imap.generic import (FolderSyncEngine, UidInvalid,
+                                                  MAX_UIDINVALID_RESYNCS)
 from inbox.mailsync.backends.gmail import GmailFolderSyncEngine
+from inbox.mailsync.backends.base import MailsyncDone
 from tests.imap.data import uids, uid_data, mock_imapclient  # noqa
 
 
@@ -81,6 +84,7 @@ def test_new_uids_synced_when_polling(db, generic_account, inbox_folder,
                                           generic_account.email_address,
                                           'custom',
                                           BoundedSemaphore(1))
+    # Don't sleep at the end of poll_impl before returning.
     folder_sync_engine.poll_frequency = 0
     folder_sync_engine.poll_impl()
 
@@ -112,6 +116,8 @@ def test_condstore_flags_refresh(db, default_account, all_mail_folder,
         v['MODSEQ'] = (k,)
 
     folder_sync_engine.highestmodseq = 0
+    # Don't sleep at the end of poll_impl before returning.
+    folder_sync_engine.poll_frequency = 0
     folder_sync_engine.poll_impl()
     imapuids = db.session.query(ImapUid). \
         filter_by(folder_id=all_mail_folder.id).all()
@@ -139,6 +145,8 @@ def test_generic_flags_refresh_expunges_transient_uids(
                                           'custom',
                                           BoundedSemaphore(1))
     folder_sync_engine.initial_sync()
+    # Don't sleep at the end of poll_impl before returning.
+    folder_sync_engine.poll_frequency = 0
     folder_sync_engine.poll_impl()
     msg = db.session.query(Message).filter_by(
         namespace_id=generic_account.namespace.id).first()
@@ -177,6 +185,51 @@ def test_handle_uidinvalid(db, generic_account, inbox_folder, mock_imapclient):
         ImapUid.folder_id == inbox_folder.id).all() == []
 
 
+def test_handle_uidinvalid_loops(db, generic_account, inbox_folder,
+                                 mock_imapclient, monkeypatch):
+
+    import inbox.mailsync.backends.imap.generic as generic_import
+
+    mock_imapclient.uidvalidity = 1
+
+    # We're using a list here because of weird monkeypatching shenanigans.
+    uidinvalid_count = []
+
+    def fake_poll_function(self):
+        uidinvalid_count.append(1)
+        raise UidInvalid
+
+    monkeypatch.setattr("inbox.mailsync.backends.imap.generic.FolderSyncEngine.poll",
+                        fake_poll_function)
+
+    uid_dict = uids.example()
+    mock_imapclient.add_folder_data(inbox_folder.name, uid_dict)
+    inbox_folder.imapfolderinfo = ImapFolderInfo(account=generic_account,
+                                                 uidvalidity=1,
+                                                 uidnext=1)
+    db.session.commit()
+    folder_sync_engine = generic_import.FolderSyncEngine(generic_account.id,
+                                                         generic_account.namespace.id,
+                                                         inbox_folder.name,
+                                                         generic_account.email_address,
+                                                         'custom',
+                                                         BoundedSemaphore(1))
+
+    folder_sync_engine.state = 'poll'
+
+    db.session.expunge(inbox_folder.imapsyncstatus)
+
+    with pytest.raises(MailsyncDone):
+        folder_sync_engine._run()
+
+    assert len(uidinvalid_count) == MAX_UIDINVALID_RESYNCS + 1
+
+
+def raise_imap_error(self):
+    from imaplib import IMAP4
+    raise IMAP4.error('Unexpected IDLE response')
+
+
 def test_gmail_initial_sync(db, default_account, all_mail_folder,
                             mock_imapclient):
     uid_dict = uids.example()
@@ -184,6 +237,7 @@ def test_gmail_initial_sync(db, default_account, all_mail_folder,
     mock_imapclient.list_folders = lambda: [(('\\All', '\\HasNoChildren',),
                                              '/', u'[Gmail]/All Mail')]
     mock_imapclient.idle = lambda: None
+    mock_imapclient.idle_check = raise_imap_error
 
     folder_sync_engine = GmailFolderSyncEngine(default_account.id,
                                                default_account.namespace.id,
@@ -210,6 +264,7 @@ def test_gmail_message_deduplication(db, default_account, all_mail_folder,
     mock_imapclient.idle = lambda: None
     mock_imapclient.add_folder_data(all_mail_folder.name, {uid: uid_values})
     mock_imapclient.add_folder_data(trash_folder.name, {uid: uid_values})
+    mock_imapclient.idle_check = raise_imap_error
 
     all_folder_sync_engine = GmailFolderSyncEngine(
         default_account.id, default_account.namespace.id, all_mail_folder.name,
@@ -236,7 +291,7 @@ def test_gmail_message_deduplication(db, default_account, all_mail_folder,
 
 
 def test_imap_message_deduplication(db, generic_account, inbox_folder,
-                                     generic_trash_folder, mock_imapclient):
+                                    generic_trash_folder, mock_imapclient):
     uid = 22
     uid_values = uid_data.example()
 
@@ -250,21 +305,21 @@ def test_imap_message_deduplication(db, generic_account, inbox_folder,
                                     {uid: uid_values})
 
     folder_sync_engine = FolderSyncEngine(
-                         generic_account.id,
-                         generic_account.namespace.id,
-                         inbox_folder.name,
-                         generic_account.email_address,
-                         'custom',
-                         BoundedSemaphore(1))
+        generic_account.id,
+        generic_account.namespace.id,
+        inbox_folder.name,
+        generic_account.email_address,
+        'custom',
+        BoundedSemaphore(1))
     folder_sync_engine.initial_sync()
 
     trash_folder_sync_engine = FolderSyncEngine(
-                               generic_account.id,
-                               generic_account.namespace.id,
-                               generic_trash_folder.name,
-                               generic_account.email_address,
-                               'custom',
-                               BoundedSemaphore(1))
+        generic_account.id,
+        generic_account.namespace.id,
+        generic_trash_folder.name,
+        generic_account.email_address,
+        'custom',
+        BoundedSemaphore(1))
     trash_folder_sync_engine.initial_sync()
 
     # Check that we have two uids, but just one message.

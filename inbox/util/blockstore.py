@@ -16,11 +16,12 @@ if STORE_MSG_ON_S3:
 else:
     from inbox.util.file import mkdirp
 
-    _data_file_directory = \
-        lambda h: os.path.join(config.get_required('MSG_PARTS_DIRECTORY'),
-                               h[0], h[1], h[2], h[3], h[4], h[5])
+    def _data_file_directory(h):
+        return os.path.join(config.get_required('MSG_PARTS_DIRECTORY'),
+                            h[0], h[1], h[2], h[3], h[4], h[5])
 
-    _data_file_path = lambda h: os.path.join(_data_file_directory(h), h)
+    def _data_file_path(h):
+        return os.path.join(_data_file_directory(h), h)
 
 
 def save_to_blockstore(data_sha256, data):
@@ -34,7 +35,18 @@ def save_to_blockstore(data_sha256, data):
     if STORE_MSG_ON_S3:
         _save_to_s3(data_sha256, data)
     else:
-        _save_to_disk(data_sha256, data)
+        directory = _data_file_directory(data_sha256)
+        mkdirp(directory)
+
+        with open(_data_file_path(data_sha256), 'wb') as f:
+            f.write(data)
+
+
+def is_in_blockstore(data_sha256):
+    if STORE_MSG_ON_S3:
+        return _is_in_s3(data_sha256)
+    else:
+        return os.path.exists(_data_file_path(data_sha256))
 
 
 def get_from_blockstore(data_sha256):
@@ -81,12 +93,19 @@ def _save_to_s3(data_sha256, data):
     statsd_client.timing('s3.save_latency', latency_millis)
 
 
-def _save_to_disk(data_sha256, data):
-    directory = _data_file_directory(data_sha256)
-    mkdirp(directory)
+def _is_in_s3(data_sha256):
+    assert 'AWS_ACCESS_KEY_ID' in config, 'Need AWS key!'
+    assert 'AWS_SECRET_ACCESS_KEY' in config, 'Need AWS secret!'
+    assert 'MESSAGE_STORE_BUCKET_NAME' in config, \
+        'Need bucket name to store message data!'
 
-    with open(_data_file_path(data_sha256), 'wb') as f:
-        f.write(data)
+    # Boto pools connections at the class level
+    conn = S3Connection(config.get('AWS_ACCESS_KEY_ID'),
+                        config.get('AWS_SECRET_ACCESS_KEY'))
+    bucket = conn.get_bucket(config.get('MESSAGE_STORE_BUCKET_NAME'),
+                             validate=False)
+
+    return bool(bucket.get_key(data_sha256))
 
 
 def _get_from_s3(data_sha256):

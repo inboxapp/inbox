@@ -1,6 +1,12 @@
+cache:
+  directories:
+    - /home/travis/virtualenv
 before_install:
   - mysql -uroot -Dmysql -e 'UPDATE user SET password=PASSWORD("root") WHERE user="root"; FLUSH PRIVILEGES;'
-
-install: "sudo ./setup.sh"
-# command to run tests
-script: INBOX_ENV=test py.test tests
+install:
+  - sudo -H pip install flake8
+  - sudo -H ./setup.sh | awk '{ print strftime("%Y-%m-%d %H:%M:%S"), $0; fflush(); }'
+script:
+  - flake8 --select=F inbox
+  - pylint -d all -e w0631 inbox
+  - INBOX_ENV=test py.test tests -m "not networkrequired"

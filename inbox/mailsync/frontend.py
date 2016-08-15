@@ -1,4 +1,5 @@
 import gevent
+import gevent._threading  # This is a clone of the *real* threading module
 from pympler import muppy, summary
 from werkzeug.serving import run_simple, WSGIRequestHandler
 from flask import Flask, jsonify, request
@@ -9,6 +10,7 @@ class HTTPFrontend(object):
     """This is a lightweight embedded HTTP server that runs inside a mailsync
     process. It allows you can programmatically interact with the process:
     to get profile/memory/load metrics, or to schedule new account syncs."""
+
     def __init__(self, sync_service, port, trace_greenlets, profile):
         self.sync_service = sync_service
         self.port = port
@@ -24,8 +26,10 @@ class HTTPFrontend(object):
 
         app = self._create_app()
 
-        gevent.spawn(run_simple, '0.0.0.0', self.port, app,
-                     request_handler=_QuietHandler)
+        # We need to spawn an OS-level thread because we don't want a stuck
+        # greenlet to prevent us to access the web API.
+        gevent._threading.start_new_thread(run_simple, ('0.0.0.0', self.port, app),
+                                           {"request_handler": _QuietHandler})
 
     def _create_app(self):
         app = Flask(__name__)
@@ -67,6 +71,7 @@ class HTTPFrontend(object):
 
 
 class _QuietHandler(WSGIRequestHandler):
+
     def log_request(self, *args, **kwargs):
         """Suppress request logging so as not to pollute application logs."""
         pass

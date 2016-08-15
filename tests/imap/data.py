@@ -10,6 +10,7 @@ from hypothesis import strategies as s
 from hypothesis.extra.datetime import datetimes
 import flanker
 from flanker import mime
+from inbox.basicauth import ValidationError
 
 
 def _build_address_header(addresslist):
@@ -60,7 +61,7 @@ address = s.builds(
 addresslist = s.lists(
     s.tuples(basic_text, address),
     min_size=1,
-    max_size=10
+    max_size=5
 )
 
 
@@ -90,16 +91,45 @@ uid_data = s.builds(
 uids = s.dictionaries(
     s.integers(min_value=22),
     uid_data,
-    min_size=24)
+    min_size=5,
+    max_size=10)
 
 
 class MockIMAPClient(object):
     """A bare-bones stand-in for an IMAPClient instance, used to test sync
     logic without requiring a real IMAP account and server."""
+
     def __init__(self):
         self._data = {}
         self.selected_folder = None
         self.uidvalidity = 1
+        self.logins = {}
+        self.error_message = ""
+
+    def _add_login(self, email, password):
+        self.logins[email] = password
+
+    def _set_error_message(self, message):
+        self.error_message = message
+
+    def login(self, email, password):
+        if email not in self.logins or self.logins[email] != password:
+            raise ValidationError(self.error_message)
+
+    def logout(self):
+        pass
+
+    def list_folders(self, directory=u'', pattern=u'*'):
+        return []
+
+    def has_capability(self, capability):
+        return False
+
+    def idle_check(self, timeout=None):
+        return []
+
+    def idle_done(self):
+        return ('Idle terminated', [])
 
     def add_folder_data(self, folder_name, uids):
         """Adds fake UID data for the given folder."""
@@ -150,8 +180,8 @@ class MockIMAPClient(object):
                              if uid_dict[u]['MODSEQ'][0] > modseq}
         for u in items:
             if u in uid_dict:
-                resp[u] = {k: v for k, v in uid_dict[u].items() if k in data
-                           or k == 'MODSEQ'}
+                resp[u] = {k: v for k, v in uid_dict[u].items() if k in data or
+                           k == 'MODSEQ'}
         return resp
 
     def append(self, folder_name, mimemsg, flags, date):
@@ -167,6 +197,15 @@ class MockIMAPClient(object):
             'X-GM-THRID': 0
         }
 
+    def copy(self, matching_uids, folder_name):
+        """
+        Note: _moves_ one or more messages from the currently selected folder
+        to folder_name
+        """
+        for u in matching_uids:
+            self._data[folder_name][u] = self._data[self.selected_folder][u]
+        self.delete_messages(matching_uids)
+
     def capabilities(self):
         return []
 
@@ -178,11 +217,11 @@ class MockIMAPClient(object):
             'UIDVALIDITY': self.uidvalidity
         }
         if data and 'HIGHESTMODSEQ' in data:
-            resp['HIGHESTMODSEQ'] = max(v['MODSEQ'][0] for v in
+            resp['HIGHESTMODSEQ'] = max(v['MODSEQ'] for v in
                                         folder_data.values())
         return resp
 
-    def delete_messages(self, uids):
+    def delete_messages(self, uids, silent=False):
         for u in uids:
             del self._data[self.selected_folder][u]
 

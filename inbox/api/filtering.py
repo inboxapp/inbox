@@ -99,7 +99,7 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
             pass
         category_query = db_session.query(Message.thread_id). \
             prefix_with('STRAIGHT_JOIN'). \
-            join(MessageCategory).join(Category). \
+            join(Message.messagecategories).join(MessageCategory.category). \
             filter(Category.namespace_id == namespace_id,
                    or_(*category_filters)).subquery()
         query = query.filter(Thread.id.in_(category_query))
@@ -185,6 +185,23 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         query = bakery(lambda s: s.query(Message.public_id))
     else:
         query = bakery(lambda s: s.query(Message))
+
+        # Sometimes MySQL doesn't pick the right index. In the case of a
+        # regular /messages query, ix_message_ns_id_is_draft_received_date
+        # is the best index because we always filter on
+        # the namespace_id, is_draft and then order by received_date.
+        # For other "exotic" queries, we let the MySQL query planner
+        # pick the right index.
+        if all(v is None for v in [subject, from_addr, to_addr, cc_addr,
+                                   bcc_addr, any_email, thread_public_id,
+                                   filename, in_, started_before,
+                                   started_after, last_message_before,
+                                   last_message_after]):
+            query += lambda q: q.with_hint(
+                Message,
+                'FORCE INDEX (ix_message_ns_id_is_draft_received_date)',
+                'mysql')
+
     query += lambda q: q.join(Thread)
     query += lambda q: q.filter(
         Message.namespace_id == bindparam('namespace_id'),
@@ -300,7 +317,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         except InputError:
             pass
         query += lambda q: q.prefix_with('STRAIGHT_JOIN'). \
-            join(MessageCategory).join(Category). \
+            join(Message.messagecategories).join(MessageCategory.category). \
             filter(Category.namespace_id == namespace_id,
                    or_(*category_filters))
 
@@ -533,8 +550,8 @@ def messages_for_contact_scores(db_session, namespace_id, starts_after=None):
     query = (db_session.query(
         Message.to_addr, Message.cc_addr, Message.bcc_addr,
         Message.id, Message.received_date.label('date'))
-        .join(MessageCategory)
-        .join(Category)
+        .join(MessageCategory.message)
+        .join(MessageCategory.category)
         .filter(Message.namespace_id == namespace_id)
         .filter(Category.name == 'sent')
         .filter(~Message.is_draft)
@@ -574,3 +591,32 @@ def metadata(namespace_id, app_id, view, limit, offset,
         return [x[0] for x in query.all()]
 
     return query.all()
+
+
+def metadata_for_app(app_id, limit, last, query_value, query_type, db_session):
+    if app_id is None:
+        raise ValueError('Must specify an app_id')
+
+    query = db_session.query(Metadata).filter(Metadata.app_id == app_id)
+    if last is not None:
+        query = query.filter(Metadata.id > last)
+
+    if query_type is not None:
+        if query_type not in METADATA_QUERY_OPERATORS:
+            raise ValueError(
+                'Invalid query operator for metadata query_type. Must be '
+                'one of {}'.format(', '.join(METADATA_QUERY_OPERATORS.keys())))
+        operator_filter = METADATA_QUERY_OPERATORS[query_type](query_value)
+        query = query.filter(operator_filter)
+
+    query = query.order_by(asc(Metadata.id)).limit(limit)
+    return query.all()
+
+METADATA_QUERY_OPERATORS = {
+    '>': lambda v: Metadata.queryable_value > v,
+    '>=': lambda v: Metadata.queryable_value >= v,
+    '<': lambda v: Metadata.queryable_value < v,
+    '<=': lambda v: Metadata.queryable_value <= v,
+    '==': lambda v: Metadata.queryable_value == v,
+    '!=': lambda v: Metadata.queryable_value != v,
+}

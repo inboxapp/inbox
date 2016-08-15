@@ -4,7 +4,8 @@ import os
 from setproctitle import setproctitle
 
 import click
-import gevent_openssl; gevent_openssl.monkey_patch()
+import gevent_openssl
+gevent_openssl.monkey_patch()
 from gevent import monkey
 
 from inbox.config import config as inbox_config
@@ -16,7 +17,6 @@ setproctitle('nylas-contact-search-index-service')
 monkey.patch_all()
 
 
-
 @click.command()
 @click.option('--prod/--no-prod', default=False,
               help='Disables the autoreloader and potentially other '
@@ -25,7 +25,8 @@ monkey.patch_all()
               help='Path to JSON configuration file.')
 def main(prod, config):
     """ Launch the contact search index service. """
-    configure_logging(log_level=inbox_config.get('LOGLEVEL'))
+    level = os.environ.get('LOGLEVEL', inbox_config.get('LOGLEVEL'))
+    configure_logging(log_level=level)
 
     if config is not None:
         from inbox.util.startup import load_overrides

@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa: F811
 import smtplib
 import json
 import time
 import pytest
+import traceback
+import contextlib
 from flanker import mime
+import inbox.api.ns_api
 from inbox.basicauth import OAuthError
 from inbox.models import Message, Event
 from tests.util.base import thread, message, imported_event
-from tests.api.base import api_client, attachments
+from tests.api.base import api_client
+from inbox.sendmail.smtp.postel import _substitute_bcc
 
 
-__all__ = ['thread', 'message', 'api_client', 'imported_event', 'attachments']
+__all__ = ['thread', 'message', 'api_client', 'imported_event']
 
 
 class MockTokenManager(object):
@@ -96,7 +101,7 @@ def erring_smtp_connection(exc_type, *args):
 # Different providers use slightly different errors, so parametrize this test
 # fixture to imitate them.
 @pytest.fixture(params=[
-    "5.4.5 Daily sending quota exceeded"
+    "5.4.5 Daily sending quota exceeded",
     "5.7.1 You have exceeded your daily sending limits"])
 @pytest.fixture
 def quota_exceeded(patch_token_manager, monkeypatch, request):
@@ -112,18 +117,22 @@ def connection_closed(patch_token_manager, monkeypatch):
                         erring_smtp_connection(smtplib.SMTPServerDisconnected))
 
 
-@pytest.fixture
-def recipients_refused(patch_token_manager, monkeypatch):
+@pytest.fixture(params=[
+    "User unknown",
+    "5.1.1 <noreply@example.com>: Recipient address rejected: "
+    "User unknown in virtual mailbox table"
+])
+def recipients_refused(patch_token_manager, monkeypatch, request):
     monkeypatch.setattr('inbox.sendmail.smtp.postel.SMTPConnection',
                         erring_smtp_connection(smtplib.SMTPRecipientsRefused,
                                                {'foo@foocorp.com':
-                                                (550, 'User unknown')}))
+                                                (550, request.param)}))
 
 
 # Different providers use slightly different errors, so parametrize this test
 # fixture to imitate them.
 @pytest.fixture(params=[
-    "5.2.3 Your message exceeded Google's message size limits"
+    "5.2.3 Your message exceeded Google's message size limits",
     "5.3.4 Message size exceeds fixed maximum message size"])
 def message_too_large(patch_token_manager, monkeypatch, request):
     monkeypatch.setattr(
@@ -182,81 +191,26 @@ def example_draft_bad_body(db, default_account):
     }
 
 
-def test_send_with_event(patch_smtp, api_client, example_draft, event):
-    # Create a draft
-    r = api_client.post_data('/drafts', example_draft)
-    msgs = patch_smtp
-    assert r.status_code == 200
-    draft_public_id = json.loads(r.data)['id']
-    version = json.loads(r.data)['version']
+@pytest.fixture
+def example_event(db, api_client):
+    from inbox.models.calendar import Calendar
+    cal = db.session.query(Calendar).get(1)
 
-    # Send the draft along with an event ID to use for invites
-    r = api_client.post_data('/send',
-                             {'draft_id': draft_public_id,
-                              'version': version,
-                              'event_id': event.public_id})
-    assert r.status_code == 200
+    event = {
+        'title': 'Invite test',
+        'when': {
+            "end_time": 1436210662,
+            "start_time": 1436207062
+        },
+        'participants': [
+            {'email': 'helena@nylas.com'}
+        ],
+        'calendar_id': cal.public_id,
+    }
 
-    # Make sure one message was sent
-    assert len(msgs) == 1
-    recipients, raw_msg = msgs[0]
-    msg = mime.from_string(raw_msg)
-
-    # Check the MIME body of the message to make sure the event is there
-    parts = []
-    for mimepart in msg.walk(with_self=msg.content_type.is_singlepart()):
-        format_type = mimepart.content_type.format_type
-        subtype = mimepart.content_type.subtype
-        parts.append((format_type, subtype))
-    assert ('text', 'plain') in parts
-    assert ('text', 'html') in parts
-    assert ('text', 'calendar') in parts
-
-
-def test_send_with_event_and_attachments(patch_smtp, api_client, example_draft,
-                                         event, attachments):
-    msgs = patch_smtp
-
-    # Load and post file for attachment
-    filename, path = attachments[0]
-    data = {'file': (open(path, 'rb'), filename)}
-    r = api_client.post_raw('/files', data=data)
-    assert r.status_code == 200
-    attachment_id = json.loads(r.data)[0]['id']
-
-    # Add attachment to the new draft and post the draft
-    example_draft['file_ids'] = [attachment_id]
-    r = api_client.post_data('/drafts', example_draft)
-    assert r.status_code == 200
-    returned_draft = json.loads(r.data)
-    draft_public_id = returned_draft['id']
-    version = returned_draft['version']
-
-    # Send the draft along with an event ID to use for invites
-    r = api_client.post_data('/send',
-                             {'draft_id': draft_public_id,
-                              'version': version,
-                              'event_id': event.public_id})
-    assert r.status_code == 200
-
-    # Make sure one message was sent
-    assert len(msgs) == 1
-    recipients, raw_msg = msgs[0]
-    msg = mime.from_string(raw_msg)
-
-    # Check the MIME body of the message to make sure both the event and the
-    # attachment are there
-    parts = []
-    for mimepart in msg.walk(with_self=msg.content_type.is_singlepart()):
-        is_attachment = mimepart.is_attachment()
-        format_type = mimepart.content_type.format_type
-        subtype = mimepart.content_type.subtype
-        parts.append((format_type, subtype, is_attachment))
-
-    assert ('text', 'plain', False) in parts
-    assert ('text', 'html', False) in parts
-    assert ('text', 'calendar', False) in parts
-    assert ('image', 'jpeg', True) in parts
+    r = api_client.post_data('/events', event)
+    event_public_id = json.loads(r.data)['id']
+    return event_public_id
 
 
 def test_send_existing_draft(patch_smtp, api_client, example_draft):
@@ -534,40 +488,39 @@ def test_sending_from_email_alias(patch_smtp, api_client):
 
 def test_sending_raw_mime(patch_smtp, api_client):
     api_client.post_raw('/send', ('From: bob@foocorp.com\r\n'
-                                    'To: golang-nuts '
-                                    '<golang-nuts@googlegroups.com>\r\n'
-                                    'Cc: prez@whitehouse.gov\r\n'
-                                    'Bcc: Some Guy <masterchief@halo.com>\r\n'
-                                    'Subject: '
-                                    '[go-nuts] Runtime Panic On Method Call'
-                                    '\r\n'
-                                    'Mime-Version: 1.0\r\n'
-                                    'In-Reply-To: '
-                                    '<78pgxboai332pi9p2smo4db73-0'
-                                    '@mailer.nylas.com>\r\n'
-                                    'References: '
-                                    '<78pgxboai332pi9p2smo4db73-0'
-                                    '@mailer.nylas.com>\r\n'
-                                    'Content-Type: text/plain; charset=UTF-8'
-                                    '\r\n'
-                                    'Content-Transfer-Encoding: 7bit\r\n'
-                                    'X-My-Custom-Header: Random\r\n\r\n'
-                                    'Yo.'), headers={'Content-Type':
-                                                        'message/rfc822'})
+                                  'To: golang-nuts '
+                                  '<golang-nuts@googlegroups.com>\r\n'
+                                  'Cc: prez@whitehouse.gov\r\n'
+                                  'Bcc: Some Guy <masterchief@halo.com>\r\n'
+                                  'Subject: '
+                                  '[go-nuts] Runtime Panic On Method Call'
+                                  '\r\n'
+                                  'Mime-Version: 1.0\r\n'
+                                  'In-Reply-To: '
+                                  '<78pgxboai332pi9p2smo4db73-0'
+                                  '@mailer.nylas.com>\r\n'
+                                  'References: '
+                                  '<78pgxboai332pi9p2smo4db73-0'
+                                  '@mailer.nylas.com>\r\n'
+                                  'Content-Type: text/plain; charset=UTF-8'
+                                  '\r\n'
+                                  'Content-Transfer-Encoding: 7bit\r\n'
+                                  'X-My-Custom-Header: Random\r\n\r\n'
+                                  'Yo.'),
+                        headers={'Content-Type': 'message/rfc822'})
 
     _, msg = patch_smtp[-1]
     parsed = mime.from_string(msg)
     assert parsed.body == 'Yo.'
     assert parsed.headers['From'] == 'bob@foocorp.com'
     assert parsed.headers['Subject'] == \
-                            '[go-nuts] Runtime Panic On Method Call'
+        '[go-nuts] Runtime Panic On Method Call'
     assert parsed.headers['Cc'] == 'prez@whitehouse.gov'
-    assert parsed.headers['To'] == \
-                            'golang-nuts <golang-nuts@googlegroups.com>'
+    assert parsed.headers['To'] == 'golang-nuts <golang-nuts@googlegroups.com>'
     assert parsed.headers['In-Reply-To'] == \
-                            '<78pgxboai332pi9p2smo4db73-0@mailer.nylas.com>'
+        '<78pgxboai332pi9p2smo4db73-0@mailer.nylas.com>'
     assert parsed.headers['References'] == \
-                            '<78pgxboai332pi9p2smo4db73-0@mailer.nylas.com>'
+        '<78pgxboai332pi9p2smo4db73-0@mailer.nylas.com>'
     assert parsed.headers['X-My-Custom-Header'] == 'Random'
     assert 'Bcc' not in parsed.headers
     assert 'X-INBOX-ID' in parsed.headers
@@ -588,7 +541,7 @@ def test_sending_bad_raw_mime(patch_smtp, api_client):
                                         'X-My-Custom-Header: Random'
                                         '\r\n\r\n'
                                         'Yo.'), headers={'Content-Type':
-                                                            'message/rfc822'})
+                                                         'message/rfc822'})
 
     assert res.status_code == 400
 
@@ -729,3 +682,263 @@ def test_sent_messages_shown_in_delta(patch_smtp, api_client, example_draft):
     assert message_delta is not None
     assert message_delta['object'] == 'message'
     assert message_delta['event'] == 'create'
+
+
+# MULTI-SEND #
+
+def test_multisend_init_new_draft(patch_smtp, api_client, example_draft):
+    r = api_client.post_data('/send-multiple',
+                             example_draft)
+    assert r.status_code == 200
+    draft_public_id = json.loads(r.data)['id']
+
+    # Test that the sent draft can't be sent normally now
+    r = api_client.post_data('/send',
+                             {'draft_id': draft_public_id,
+                              'version': 0})
+    assert r.status_code == 400
+
+    # It's not a draft anymore
+    drafts = api_client.get_data('/drafts')
+    assert not drafts
+
+    # We can retrieve it as a message, but it's not "sent" yet
+    message = api_client.get_data('/messages/{}'.format(draft_public_id))
+    assert message['object'] == 'message'
+
+
+def test_multisend_init_rejected_with_existing_draft(api_client,
+                                                     example_draft):
+    r = api_client.post_data('/drafts', example_draft)
+    draft_public_id = json.loads(r.data)['id']
+    version = json.loads(r.data)['version']
+
+    r = api_client.post_data('/send-multiple',
+                             {'draft_id': draft_public_id,
+                              'version': version})
+    assert r.status_code == 400
+
+
+def test_multisend_init_rejected_without_recipients(api_client):
+    r = api_client.post_data('/send-multiple',
+                             {'subject': 'Hello there'})
+    assert r.status_code == 400
+
+
+def test_multisend_init_malformed_body_rejected(api_client,
+                                                example_draft_bad_body):
+    r = api_client.post_data('/send-multiple', example_draft_bad_body)
+
+    assert r.status_code == 400
+
+    decoded = json.loads(r.get_data())
+    assert decoded['type'] == 'invalid_request_error'
+    assert decoded['message'] == '"body" should be a string'
+
+
+def test_multisend_init_malformed_subject_rejected(api_client,
+                                                   example_draft_bad_subject):
+    r = api_client.post_data('/send-multiple', example_draft_bad_subject)
+    assert r.status_code == 400
+
+    decoded = json.loads(r.get_data())
+    assert decoded['type'] == 'invalid_request_error'
+    assert decoded['message'] == '"subject" should be a string'
+
+
+def test_multisend_init_malformed_request_rejected(api_client):
+    r = api_client.post_data('/send-multiple', {})
+    assert r.status_code == 400
+
+
+@pytest.fixture
+def multisend_draft(api_client, example_draft):
+    example_draft['to'].append({'email': 'bob@foocorp.com'})
+    r = api_client.post_data('/send-multiple', example_draft)
+    assert r.status_code == 200
+    return json.loads(r.get_data())
+
+
+@pytest.fixture
+def multisend(multisend_draft):
+    return {
+        'id': multisend_draft['id'],
+        'send_req': {'body': "email body",
+                     'send_to': multisend_draft['to'][0]},
+        'draft': multisend_draft
+    }
+
+
+@pytest.fixture
+def multisend2(multisend_draft):
+    return {
+        'id': multisend_draft['id'],
+        'send_req': {'body': "email body 2",
+                     'send_to': multisend_draft['to'][1]},
+        'draft': multisend_draft
+    }
+
+
+@pytest.fixture
+def patch_crispin_del_sent(monkeypatch):
+    # This lets us test the interface between remote_delete_sent /
+    # writable_connection_pool and the multi-send delete API endpoint, without
+    # running an actual crispin client.
+    #
+    # Multi-send uses these functions from syncback to synchronously delete
+    # sent messages. They usually don't appear in API code, so this makes sure
+    # their usage is correct.
+
+    def fake_remote_delete_sent(crispin_client, account_id, message_id_header,
+                                delete_multiple=False):
+        return True
+
+    class FakeConnWrapper(object):
+        def __init__(self):
+            pass
+
+        @contextlib.contextmanager
+        def get(self):
+            yield MockCrispinClient()
+
+    class MockCrispinClient(object):
+        def folder_names(self):
+            return ['sent']
+
+        def delete_sent_message(message_id_header, delete_multiple=False):
+            pass
+
+
+    def fake_conn_pool(acct_id):
+        return FakeConnWrapper()
+
+    monkeypatch.setattr('inbox.api.ns_api.remote_delete_sent',
+                        fake_remote_delete_sent)
+    monkeypatch.setattr('inbox.api.ns_api.writable_connection_pool',
+                        fake_conn_pool)
+
+
+@pytest.fixture
+def patch_sentry_to_raise(monkeypatch):
+    # This makes it so calls to sentry instead raise an exception in the test
+    # and fail it. This is used to test the multi-send delete endpoint, where
+    # we wrap sent message deletion in a catch-all but still report to sentry.
+    def make_sentry_raise():
+        traceback.print_exc()
+        raise
+    monkeypatch.setattr(inbox.api.ns_api.sentry, 'sentry_alert',
+                        make_sentry_raise)
+
+
+def test_multisend_session(api_client, multisend, multisend2, patch_smtp,
+                           patch_crispin_del_sent, patch_sentry_to_raise):
+
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 200
+    assert json.loads(r.data)['body'] == multisend['send_req']['body']
+
+    r = api_client.post_data('/send-multiple/' + multisend2['id'],
+                             multisend2['send_req'])
+    assert r.status_code == 200
+    assert json.loads(r.data)['body'] == multisend2['send_req']['body']
+
+    # Make sure we can't send to people not in the message recipients
+    req_body = {'send_req': {'body': "you're not even a recipient!",
+                             'send_to': {'name': 'not in message',
+                                         'email': 'not@in.msg'}}}
+    r = api_client.post_data('/send-multiple/' + multisend['id'], req_body)
+    assert r.status_code == 400
+
+    r = api_client.delete('/send-multiple/' + multisend['id'])
+    assert r.status_code == 200
+    assert json.loads(r.data)['body'] == multisend['draft']['body']
+
+
+def test_multisend_handle_invalid_credentials(disallow_auth, api_client,
+                                              multisend,
+                                              patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 403
+    assert json.loads(r.data)['message'] == 'Could not authenticate with ' \
+                                            'the SMTP server.'
+
+
+def test_multisend_handle_quota_exceeded(quota_exceeded, api_client,
+                                         multisend, patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 429
+    assert json.loads(r.data)['message'] == 'Daily sending quota exceeded'
+
+
+def test_multisend_handle_server_disconnected(connection_closed, api_client,
+                                              multisend,
+                                              patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 503
+    assert json.loads(r.data)['message'] == 'The server unexpectedly closed ' \
+                                            'the connection'
+
+
+def test_multisend_handle_recipients_rejected(recipients_refused, api_client,
+                                              multisend,
+                                              patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 402
+    assert json.loads(r.data)['message'] == 'Sending to all recipients failed'
+
+
+def test_multisend_handle_message_too_large(message_too_large, api_client,
+                                            multisend, patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 402
+    assert json.loads(r.data)['message'] == 'Message too large'
+
+
+def test_multisend_message_rejected_for_security(insecure_content, api_client,
+                                                 multisend,
+                                                 patch_crispin_del_sent):
+    r = api_client.post_data('/send-multiple/' + multisend['id'],
+                             multisend['send_req'])
+    assert r.status_code == 402
+    assert json.loads(r.data)['message'] == 'Message content rejected ' \
+                                            'for security reasons'
+
+
+def test_raw_bcc_replacements(patch_smtp, api_client):
+    # Check that we're replacing "Bcc:" correctly from messages.
+    res = _substitute_bcc('From: bob@foocorp.com\r\n'
+                          'To: \r\n'
+                          'Bcc: karim@nylas.com\r\n'
+                          'Subject: '
+                          '[go-nuts] Runtime Panic On Method'
+                          'Call \r\n'
+                          'Mime-Version: 1.0\r\n'
+                          'Content-Type: '
+                          'text/plain; charset=UTF-8\r\n'
+                          'Content-Transfer-Encoding: 7bit\r\n'
+                          'X-My-Custom-Header: Random'
+                          '\r\n\r\n')
+
+    assert 'karim@nylas.com' not in res
+
+    res = _substitute_bcc('From: bob@foocorp.com\r\n'
+                          'To: \r\n'
+                          'BCC: karim@nylas.com\r\n'
+                          'Subject: '
+                          '[go-nuts] Runtime BCC: On Method'
+                          'Call \r\n'
+                          'Mime-Version: 1.0\r\n'
+                          'Content-Type: '
+                          'text/plain; charset=UTF-8\r\n'
+                          'Content-Transfer-Encoding: 7bit\r\n'
+                          'X-My-Custom-Header: Random'
+                          '\r\n\r\n')
+
+    assert 'karim@nylas.com' not in res
+    assert 'Runtime BCC:' in res

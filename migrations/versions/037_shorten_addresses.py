@@ -11,13 +11,13 @@ revision = '1d7374c286c5'
 down_revision = '21878b1b3d4b'
 
 from alembic import op
-import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 
 
 def upgrade():
     op.alter_column('account', 'email_address', type_=mysql.VARCHAR(191))
     op.alter_column('contact', 'email_address', type_=mysql.VARCHAR(191))
+
 
 def downgrade():
     op.alter_column('account', 'email_address', type_=mysql.VARCHAR(254))
