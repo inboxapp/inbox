@@ -72,7 +72,7 @@ def patch_smtp(patch_token_manager, monkeypatch):
         def __exit__(self, exc_type, value, traceback):
             pass
 
-        def sendmail(self, recipients, msg):
+        def sendmail(self, recipients, msg, from_email=None):
             submitted_messages.append((recipients, msg))
 
     monkeypatch.setattr('inbox.sendmail.smtp.postel.SMTPConnection',
@@ -92,7 +92,7 @@ def erring_smtp_connection(exc_type, *args):
         def __exit__(self, exc_type, value, traceback):
             pass
 
-        def sendmail(self, recipients, msg):
+        def sendmail(self, recipients, msg, from_email=None):
             raise exc_type(*args)
 
     return ErringSMTPConnection

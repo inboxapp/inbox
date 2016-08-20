@@ -268,14 +268,17 @@ class SMTPConnection(object):
 
         self.log.info('SMTP Auth(Password) success')
 
-    def sendmail(self, recipients, msg):
+    def sendmail(self, recipients, msg, from_email=None):
+        if from_email is None:
+            from_email = self.email_address
+
         try:
             return self.connection.sendmail(
-                self.email_address, recipients, msg)
+                from_email, recipients, msg)
         except UnicodeEncodeError:
             self.log.error('Unicode error when trying to decode email',
                            logstash_tag='sendmail_encode_error',
-                           email=self.email_address, recipients=recipients)
+                           email=from_email, recipients=recipients)
             raise SendMailException(
                 'Invalid character in recipient address', 402)
 
@@ -314,7 +317,7 @@ class SMTPClient(object):
                 # non-generic accounts have no smtp password
                 self.auth_token = account.password
 
-    def _send(self, recipients, msg):
+    def _send(self, recipients, msg, from_email=None):
         """Send the email message. Retries up to SMTP_MAX_RETRIES times if the
         message couldn't be submitted to any recipient.
 
@@ -333,7 +336,7 @@ class SMTPClient(object):
         for _ in range(SMTP_MAX_RETRIES + 1):
             try:
                 with self._get_connection() as smtpconn:
-                    failures = smtpconn.sendmail(recipients, msg)
+                    failures = smtpconn.sendmail(recipients, msg, from_email=from_email)
                     if not failures:
                         # Sending successful!
                         return
@@ -460,8 +463,9 @@ class SMTPClient(object):
 
         # from_addr is only ever a list with one element
         from_addr = draft.from_addr[0]
+        from_email = from_addr[1]
         msg = create_email(from_name=from_addr[0],
-                           from_email=from_addr[1],
+                           from_email=from_email,
                            reply_to=draft.reply_to,
                            nylas_uid=draft.nylas_uid,
                            to_addr=draft.to_addr,
@@ -475,7 +479,7 @@ class SMTPClient(object):
 
         recipient_emails = [email for name, email in itertools.chain(
             draft.to_addr, draft.cc_addr, draft.bcc_addr)]
-        self._send(recipient_emails, msg)
+        self._send(recipient_emails, msg, from_email=from_email)
 
         # Sent to all successfully
         self.log.info('Sending successful', sender=from_addr[1],
