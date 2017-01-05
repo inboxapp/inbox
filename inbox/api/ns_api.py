@@ -65,12 +65,7 @@ from inbox.s3.base import get_raw_from_provider
 from inbox.s3.exc import (EmailFetchException, TemporaryEmailFetchException,
                           EmailDeletedException)
 from inbox.util.stats import statsd_client
-
-try:
-    from inbox.util.eas.codes import STORE_STATUS_CODES
-except ImportError:
-    # Only important for EAS search failures, so shouldn't trigge test failures
-    pass
+from inbox.util.eas.codes import STORE_STATUS_CODES
 
 
 from nylas.logging import get_logger
