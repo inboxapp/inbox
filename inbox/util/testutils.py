@@ -25,6 +25,8 @@ def create_test_db():
     # The various test databases necessarily have "test" in their name.
     assert all(['test' in s for s, h in schemas])
 
+
+
     for name, host in schemas:
         cmd = 'DROP DATABASE IF EXISTS {name}; ' \
               'CREATE DATABASE IF NOT EXISTS {name} ' \
@@ -32,11 +34,13 @@ def create_test_db():
               'utf8mb4_general_ci'.format(name=name)
 
         if os.environ.get('TRAVIS'):
-            subprocess.check_call('mysql -h {} -uroot '
+            subprocess.check_call('mysql -uroot '
                               '-e "{}"'.format(host, cmd), shell=True)
         else:
             subprocess.check_call('mysql -h {} -uinboxtest -pinboxtest '
                               '-e "{}"'.format(host, cmd), shell=True)
+
+
 
 def setup_test_db():
     """
