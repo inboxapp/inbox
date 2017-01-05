@@ -6,6 +6,12 @@ before_install:
 install:
   - sudo -H pip install flake8
   - sudo -H ./setup.sh | awk '{ print strftime("%Y-%m-%d %H:%M:%S"), $0; fflush(); }'
+
+before_script:
+  # - echo "USE mysql;\nUPDATE user SET password=PASSWORD('password') WHERE user='root';\nFLUSH PRIVILEGES;\n" | mysql -u root
+  - echo "CREATE USER 'inboxtest'@'localhost' IDENTIFIED BY 'inboxtest';" | mysql -u root
+  - echo "GRANT ALL PRIVILEGES ON * . * TO 'inboxtest'@'localhost';" | mysql -u root
+
 script:
   - flake8 --select=F inbox
   - pylint -d all -e w0631 inbox
