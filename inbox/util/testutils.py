@@ -33,8 +33,11 @@ def create_test_db():
               'DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE ' \
               'utf8mb4_general_ci'.format(name=name)
 
-        subprocess.check_call('mysql -uroot '
-                              '-e "{}"'.format(cmd), shell=True)
+        try:
+            subprocess.check_call('mysql -uroot '
+                                  '-e "{}"'.format(cmd), shell=True)
+        except subprocess.CalledProcessError as e:
+            print e.output
 
 
 
