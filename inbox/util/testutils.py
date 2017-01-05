@@ -31,9 +31,12 @@ def create_test_db():
               'DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE ' \
               'utf8mb4_general_ci'.format(name=name)
 
-        subprocess.check_call('mysql -h {} -uinboxtest -pinboxtest '
+        if os.environ.get('TRAVIS'):
+            subprocess.check_call('mysql -h {} -uroot '
                               '-e "{}"'.format(host, cmd), shell=True)
-
+        else:
+            subprocess.check_call('mysql -h {} -uinboxtest -pinboxtest '
+                              '-e "{}"'.format(host, cmd), shell=True)
 
 def setup_test_db():
     """
