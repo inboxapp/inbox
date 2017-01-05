@@ -4,9 +4,9 @@ set -e
 
 if [ -z "$TRAVIS" ]; then
 
-    mysql -uroot  -e "GRANT ALL PRIVILEGES ON synctest.* TO root@localhost"
-    mysql -uroot -e "GRANT ALL PRIVILEGES ON synctest_1.* TO inboxtest@localhost"
-    mysql -uroot -e 'GRANT ALL PRIVILEGES ON `test%`.* TO inboxtest@localhost'
+    mysql -uroot --password="" -e "GRANT ALL PRIVILEGES ON synctest.* TO root@localhost"
+    mysql -uroot --password="" -e "GRANT ALL PRIVILEGES ON synctest_1.* TO inboxtest@localhost"
+    mysql -uroot --password="" -e 'GRANT ALL PRIVILEGES ON `test%`.* TO inboxtest@localhost'
 
 else
 
