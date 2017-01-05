@@ -35,7 +35,7 @@ def create_test_db():
 
         if os.environ.get('TRAVIS'):
             subprocess.check_call('mysql -uroot '
-                              '-e "{}"'.format(host, cmd), shell=True)
+                              '-e "{}"'.format(cmd), shell=True)
         else:
             subprocess.check_call('mysql -h {} -uinboxtest -pinboxtest '
                               '-e "{}"'.format(host, cmd), shell=True)
