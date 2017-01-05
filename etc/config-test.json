@@ -20,8 +20,8 @@
 ],
 "DATABASE_USERS": {
     "127.0.0.1": {
-        "USER": "inboxtest",
-        "PASSWORD": "inboxtest"
+        "USER": "root",
+        "PASSWORD": ""
     }
 },
 
