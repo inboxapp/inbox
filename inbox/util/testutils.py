@@ -34,7 +34,7 @@ def create_test_db():
               'utf8mb4_general_ci'.format(name=name)
 
         try:
-            subprocess.check_call('mysql -uroot '
+            subprocess.check_call('mysql -uroot -p '
                                   '-e "{}"'.format(cmd), shell=True)
         except subprocess.CalledProcessError as e:
             print e.output
