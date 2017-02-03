@@ -90,6 +90,7 @@ apt-get -y install git \
                    libxslt-dev \
                    lib32z1-dev \
                    libffi-dev \
+                   libssl-dev \
                    pkg-config \
                    python-lxml \
                    tmux \
@@ -174,9 +175,9 @@ fi
 color '35;1' 'Ensuring setuptools and pip versions...'
 # If python-setuptools is actually the old 'distribute' fork of setuptools,
 # then the first 'pip install setuptools' will be a no-op.
-pip install 'pip==8.1.2' 'setuptools>=5.3'
+pip install 'pip==8.1.2' 'setuptools==18.2'
 hash pip        # /usr/bin/pip might now be /usr/local/bin/pip
-pip install 'pip==8.1.2' 'setuptools>=5.3'
+pip install 'pip==8.1.2' 'setuptools==18.2'
 
 # Doing pip upgrade setuptools leaves behind this problematic symlink
 rm -rf /usr/lib/python2.7/dist-packages/setuptools.egg-info
