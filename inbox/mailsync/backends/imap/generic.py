@@ -673,9 +673,8 @@ class FolderSyncEngine(Greenlet):
         # we don't have to completely start over. It's also slow to load many
         # objects into the SQLAlchemy session and then issue lots of commits;
         # we avoid that by batching.
-        flag_batches = chunk(
-            sorted(changed_flags.items(), key=lambda (k, v): v.modseq),
-            CONDSTORE_FLAGS_REFRESH_BATCH_SIZE)
+        iterable = sorted(changed_flags.items(), key=lambda t: t[1].modseq)
+        flag_batches = chunk(iterable, CONDSTORE_FLAGS_REFRESH_BATCH_SIZE)
         for flag_batch in flag_batches:
             with session_scope(self.namespace_id) as db_session:
                 common.update_metadata(self.account_id, self.folder_id,
