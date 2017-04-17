@@ -6,7 +6,11 @@
 VAGRANTFILE_API_VERSION = "2" unless defined? VAGRANTFILE_API_VERSION
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
-
+  # Allow host VPN on VM.  Enable this if you access mail through a VPN.
+  #  config.vm.provider :virtualbox do |vb|
+  #     vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+  # end
+ 
   # Use fewer memory and CPU resources
   #config.vm.provider :virtualbox do |vbox, override|
   #  vbox.memory = 512
