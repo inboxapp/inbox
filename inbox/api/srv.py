@@ -13,6 +13,7 @@ from inbox.api.validation import valid_public_id
 
 from ns_api import app as ns_api
 from ns_api import DEFAULT_LIMIT
+from auth_api import app as auth_api
 
 from inbox.webhooks.gpush_notifications import app as webhooks_api
 
@@ -40,8 +41,7 @@ for code in default_exceptions.iterkeys():
 @app.before_request
 def auth():
     """ Check for account ID on all non-root URLS """
-    if request.path in ('/accounts', '/accounts/', '/') \
-            or request.path.startswith('/w/'):
+    if request.path in ('/accounts', '/accounts/', '/') or request.path.startswith('/w/') or request.path.startswith('/auth/'):
         return
 
     if not request.authorization or not request.authorization.username:
@@ -129,5 +129,8 @@ def logout():
         {'WWW-Authenticate': 'Basic realm="API Access Token Required"'}))
 
 
+app.register_blueprint(auth_api) # /auth/...
+
 app.register_blueprint(ns_api)
 app.register_blueprint(webhooks_api)  # /w/...
+
