@@ -24,6 +24,8 @@ from flask.ext.restful import reqparse
 
 from inbox.util.url import provider_from_address
 
+from inbox.providers import providers
+
 app = Blueprint('auth_api',__name__,url_prefix='/auth')
 
 
@@ -32,4 +34,6 @@ def get_provider(email):
     output = {}    
     output['email'] = email
     output['provider'] = provider_from_address(email)
+    if output['provider'] in providers:
+        output['provider_info'] = providers[output['provider']]
     return json.dumps(output)
