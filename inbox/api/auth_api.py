@@ -12,6 +12,8 @@ import uuid
 import base64
 import gevent
 import itertools
+
+
 from hashlib import sha256
 from datetime import datetime
 from collections import namedtuple
@@ -30,16 +32,22 @@ from inbox.models.session import session_scope
 from inbox.models import Account
 from nylas.logging import get_logger
 
+
+
+
 app = Blueprint('auth_api',__name__,url_prefix='/auth')
 
 def default_json_error(ex):
     """ Exception -> flask JSON responder """ 
     logger = get_logger()
+
     logger.error('Uncaught error thrown by Flask/Werkzeug', exc_info=ex)
     response = jsonify(message=str(ex), type='api_error')
     response.status_code = (ex.code
                             if isinstance(ex, HTTPException)
                             else 500)
+
+
     return response
 
 @app.route('/provider/<email>')
@@ -54,8 +62,8 @@ def get_provider(email):
 
 @app.route('/gmail/')
 def new_gmail_account():
-    
-    email_address = request.args.get('email')
+    logger = get_logger()
+    #email_address = request.args.get('email')
     authcode = request.args.get('authcode')
     reauth = True
     auth_handler = GmailAuthHandler(provider_name='gmail')
@@ -63,16 +71,18 @@ def new_gmail_account():
     auth_info['contacts'] = True
     auth_info['events'] = True
     auth_info['provider'] = 'gmail'
-    
+
+    email_address = auth_info['email']
+
     with session_scope(0) as db_session:
         account = db_session.query(Account).filter_by(email_address=email_address).first()
         if account is not None and not reauth:
-             return default_json_error('Already have this account!')
+            return default_json_error('Already have this account!')
             
-        if reauth:
-          account = auth_handler.update_account(account, auth_info)
+        if account != None and reauth:
+            account = auth_handler.update_account(account, auth_info)
         else:
-          account = auth_handler.create_account(email_address, auth_info)
+            account = auth_handler.create_account(email_address, auth_info)
     
         try:
             if auth_handler.verify_account(account):
@@ -80,6 +90,6 @@ def new_gmail_account():
                 db_session.commit()
         except NotSupportedError as e:
             return default_json_error(e)
-  
-    return jsonify({"message": "new account created"})
-    
+
+        api_id = account.namespace.public_id
+    return jsonify({"message": "new account created", "api_id": api_id})
