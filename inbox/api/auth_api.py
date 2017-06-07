@@ -59,14 +59,35 @@ def get_provider(email):
         output['provider_info'] = providers[output['provider']]
     return jsonify(output)
 
+@app.route('/gmail/login/')
+def login_gmail_account():
+    authcode = request.args.get('authcode')
+    redirecturi = request.args.get('redirecturi')
+    auth_handler = GmailAuthHandler(provider_name='gmail')
+    auth_handler.OAUTH_REDIRECT_URI = redirecturi
 
-@app.route('/gmail/')
+    auth_info = auth_handler._get_authenticated_user(authcode)
+
+    email_address = auth_info['email']
+
+    with session_scope(0) as db_session:
+        account = db_session.query(Account).filter_by(email_address=email_address).first()
+        if account is None:
+            return default_json_error('The account does not exist!')
+
+        api_id = account.namespace.public_id
+        return jsonify({"message": "Login successful", "api_id": api_id})
+
+@app.route('/gmail/register')
 def new_gmail_account():
     logger = get_logger()
     #email_address = request.args.get('email')
     authcode = request.args.get('authcode')
-    reauth = True
+    redirecturi = request.args.get('redirecturi')
+    reauth = False
     auth_handler = GmailAuthHandler(provider_name='gmail')
+    auth_handler.OAUTH_REDIRECT_URI = redirecturi
+
     auth_info = auth_handler._get_authenticated_user(authcode)
     auth_info['contacts'] = True
     auth_info['events'] = True
@@ -77,9 +98,9 @@ def new_gmail_account():
     with session_scope(0) as db_session:
         account = db_session.query(Account).filter_by(email_address=email_address).first()
         if account is not None and not reauth:
-            return default_json_error('Already have this account!')
-            
-        if account != None and reauth:
+            api_id = account.namespace.public_id
+            return jsonify({"message": "Account already existent", "api_id": api_id})
+        elif account is not None and reauth:
             account = auth_handler.update_account(account, auth_info)
         else:
             account = auth_handler.create_account(email_address, auth_info)
