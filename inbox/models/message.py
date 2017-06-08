@@ -6,7 +6,7 @@ from hashlib import sha256
 from collections import defaultdict
 
 from flanker import mime
-from sqlalchemy import (Column, Integer, BigInteger, String, DateTime,
+from sqlalchemy import (Column, Integer, BigInteger, String, DateTime, ForeignKey,
                         Boolean, Enum, Index, bindparam)
 from sqlalchemy.dialects.mysql import LONGBLOB
 from sqlalchemy.orm import (relationship, backref, validates, joinedload,
@@ -26,6 +26,7 @@ from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
                                  DeletedAtMixin)
 from inbox.models.base import MailSyncBase
 from inbox.models.category import Category
+from inbox.models.namespace import Namespace
 
 from inbox.sqlalchemy_ext.util import MAX_MYSQL_INTEGER
 from inbox.util.encoding import unicode_safe_truncate
@@ -64,7 +65,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     def API_OBJECT_NAME(self):
         return 'message' if not self.is_draft else 'draft'
 
-    namespace_id = Column(BigInteger, index=True, nullable=False)
+    namespace_id = Column(ForeignKey(Namespace.id, ondelete='CASCADE'), index=True, nullable=False)
     namespace = relationship(
         'Namespace',
         primaryjoin='foreign(Message.namespace_id) == remote(Namespace.id)',  # noqa
@@ -623,7 +624,7 @@ Index('ix_message_namespace_id_message_id_header_subject',
 
 class MessageCategory(MailSyncBase):
     """ Mapping between messages and categories. """
-    message_id = Column(BigInteger, nullable=False)
+    message_id = Column(ForeignKey(Message.id, ondelete='CASCADE'), nullable=False)
     message = relationship(
         'Message',
         primaryjoin='foreign(MessageCategory.message_id) == remote(Message.id)',  # noqa
