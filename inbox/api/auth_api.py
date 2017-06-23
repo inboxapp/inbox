@@ -84,7 +84,7 @@ def new_gmail_account():
     #email_address = request.args.get('email')
     authcode = request.args.get('authcode')
     redirecturi = request.args.get('redirecturi')
-    reauth = False
+    reauth = True
     auth_handler = GmailAuthHandler(provider_name='gmail')
     auth_handler.OAUTH_REDIRECT_URI = redirecturi
 
