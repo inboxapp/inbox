@@ -50,6 +50,9 @@ def default_json_error(ex):
 
     return response
 
+####
+# Returns which provider is needed for a certain email address
+####
 @app.route('/provider/<email>')
 def get_provider(email):
     output = {}    
@@ -59,10 +62,13 @@ def get_provider(email):
         output['provider_info'] = providers[output['provider']]
     return jsonify(output)
 
-@app.route('/gmail/login/')
+####
+# Login with Google / Gmail
+####
+@app.route('/gmail/login/', methods = ['GET', 'POST'])
 def login_gmail_account():
-    authcode = request.args.get('authcode')
-    redirecturi = request.args.get('redirecturi')
+    authcode = request.values.get('authcode')
+    redirecturi = request.values.get('redirecturi')
     auth_handler = GmailAuthHandler(provider_name='gmail')
     auth_handler.OAUTH_REDIRECT_URI = redirecturi
 
@@ -78,12 +84,16 @@ def login_gmail_account():
         api_id = account.namespace.public_id
         return jsonify({"message": "Login successful", "api_id": api_id})
 
-@app.route('/gmail/register')
+
+####
+# New account registration for Gmail
+####
+@app.route('/gmail/register', methods = ['GET', 'POST'])
 def new_gmail_account():
     logger = get_logger()
-    #email_address = request.args.get('email')
-    authcode = request.args.get('authcode')
-    redirecturi = request.args.get('redirecturi')
+  
+    authcode = request.values.get('authcode')
+    redirecturi = request.values.get('redirecturi')
     reauth = True
     auth_handler = GmailAuthHandler(provider_name='gmail')
     auth_handler.OAUTH_REDIRECT_URI = redirecturi
