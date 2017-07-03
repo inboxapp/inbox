@@ -11,7 +11,7 @@ log = get_logger()
 STORE_MSG_ON_S3 = config.get('STORE_MESSAGES_ON_S3', None)
 
 if STORE_MSG_ON_S3:
-    from boto.s3.connection import S3Connection
+    from boto.s3.connection import S3Connection, OrdinaryCallingFormat
     from boto.s3.key import Key
 else:
     from inbox.util.file import mkdirp
@@ -56,8 +56,13 @@ def _save_to_s3_bucket(data_sha256, bucket_name, data):
     start = time.time()
 
     # Boto pools connections at the class level
-    conn = S3Connection(config.get('AWS_ACCESS_KEY_ID'),
-                        config.get('AWS_SECRET_ACCESS_KEY'))
+    conn = S3Connection(host=config.get('CUSTOM_S3_HOST', None),
+                        port=config.get('CUSTOM_S3_PORT', None),
+                        is_secure=config.get('CUSTOM_S3_SSL', True)
+                        aws_access_key_id=config.get('AWS_ACCESS_KEY_ID'),
+                        aws_secret_access_key=config.get('AWS_SECRET_ACCESS_KEY'),
+                        calling_format=OrdinaryCallingFormat())
+
     bucket = conn.get_bucket(bucket_name, validate=False)
 
     # See if it already exists; if so, don't recreate.
@@ -117,8 +122,13 @@ def _get_from_s3_bucket(data_sha256, bucket_name):
     if not data_sha256:
         return None
 
-    conn = S3Connection(config.get('AWS_ACCESS_KEY_ID'),
-                        config.get('AWS_SECRET_ACCESS_KEY'))
+    conn = S3Connection(host=config.get('CUSTOM_S3_HOST', None),
+                        port=config.get('CUSTOM_S3_PORT', None),
+                        is_secure=config.get('CUSTOM_S3_SSL', True)
+                        aws_access_key_id=config.get('AWS_ACCESS_KEY_ID'),
+                        aws_secret_access_key=config.get('AWS_SECRET_ACCESS_KEY'),
+                        calling_format=OrdinaryCallingFormat())
+
     bucket = conn.get_bucket(bucket_name, validate=False)
 
     key = bucket.get_key(data_sha256)
