@@ -58,7 +58,7 @@ def _save_to_s3_bucket(data_sha256, bucket_name, data):
     # Boto pools connections at the class level
     conn = S3Connection(host=config.get('CUSTOM_S3_HOST', None),
                         port=config.get('CUSTOM_S3_PORT', None),
-                        is_secure=config.get('CUSTOM_S3_SSL', True)
+                        is_secure=config.get('CUSTOM_S3_SSL', True),
                         aws_access_key_id=config.get('AWS_ACCESS_KEY_ID'),
                         aws_secret_access_key=config.get('AWS_SECRET_ACCESS_KEY'),
                         calling_format=OrdinaryCallingFormat())
@@ -124,7 +124,7 @@ def _get_from_s3_bucket(data_sha256, bucket_name):
 
     conn = S3Connection(host=config.get('CUSTOM_S3_HOST', None),
                         port=config.get('CUSTOM_S3_PORT', None),
-                        is_secure=config.get('CUSTOM_S3_SSL', True)
+                        is_secure=config.get('CUSTOM_S3_SSL', True),
                         aws_access_key_id=config.get('AWS_ACCESS_KEY_ID'),
                         aws_secret_access_key=config.get('AWS_SECRET_ACCESS_KEY'),
                         calling_format=OrdinaryCallingFormat())
