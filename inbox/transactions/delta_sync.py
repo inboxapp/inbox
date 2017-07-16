@@ -86,7 +86,7 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
                                       result_limit, exclude_types=None,
                                       include_types=None, exclude_folders=True,
                                       exclude_metadata=True, exclude_account=True,
-                                      expand=False, is_n1=False):
+                                      expand=False, is_n1=False, filter_for_namespace=True):
     """
     Return a pair (deltas, new_pointer), where deltas is a list of change
     events, represented as dictionaries:
@@ -132,15 +132,16 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
     if include_types is not None and 'metadata' in include_types:
         include_types.remove('metadata')
 
-    last_trx = _get_last_trx_id_for_namespace(namespace.id, db_session)
-    if last_trx == pointer:
-        return ([], pointer)
+    if filter_for_namespace:
+        last_trx = _get_last_trx_id_for_namespace(namespace.id, db_session)
+        if last_trx == pointer:
+            return ([], pointer)
 
     while True:
-        transactions = db_session.query(Transaction). \
-            filter(
-                Transaction.id > pointer,
-                Transaction.namespace_id == namespace.id)
+        transactions = db_session.query(Transaction).filter(Transaction.id > pointer)
+
+        if filter_for_namespace:
+            transactions.filter(Transaction.namespace_id == namespace.id)
 
         if exclude_types is not None:
             transactions = transactions.filter(
@@ -181,8 +182,10 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
                 # since the API-returned "`account`" is a `namespace`
                 # under-the-hood.
                 query = db_session.query(Namespace).join(Account).filter(
-                    Account.id.in_(ids_to_query),
-                    Namespace.id == namespace.id)
+                    Account.id.in_(ids_to_query))
+
+                if filter_for_namespace:
+                    query.filter(Namespace.id == namespace.id)
 
                 # Key by /namespace.account_id/ --
                 # namespace.id may not be equal to account.id
@@ -190,8 +193,10 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
                 objects = {obj.account_id: obj for obj in query}
             else:
                 query = db_session.query(object_cls).filter(
-                    object_cls.id.in_(ids_to_query),
-                    object_cls.namespace_id == namespace.id)
+                    object_cls.id.in_(ids_to_query))
+
+                if filter_for_namespace:
+                    query.filter(object_cls.namespace_id == namespace.id)
 
                 if object_cls == Thread:
                     query = query.options(*Thread.api_loading_options(expand))
@@ -213,8 +218,12 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
                     obj = objects.get(trx.record_id)
                     if obj is None:
                         continue
+
+
+                    namespace_public_id = namespace.public_id if filter_for_namespace else None
+
                     repr_ = encode(
-                        obj, namespace_public_id=namespace.public_id,
+                        obj, namespace_public_id=namespace_public_id, #namespace.public_id
                         expand=expand, is_n1=is_n1)
                     delta['attributes'] = repr_
 
