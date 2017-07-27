@@ -437,9 +437,7 @@ def message_query_api():
     g.parser.add_argument('unread', type=strict_bool, location='args')
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
-    g.parser.add_argument('sort_field', type=bounded_str, location='args') #Nils: Field by which should be sorted
-    g.parser.add_argument('sort_order', type=bounded_str, location='args') #Nils: asc/desc sort order
-
+    
 
     args = strict_parse_args(g.parser, request.args)
 
