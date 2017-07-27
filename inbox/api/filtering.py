@@ -26,7 +26,7 @@ def contact_subquery(db_session, namespace_id, email_address, field):
 def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
             any_email, thread_public_id, started_before, started_after,
             last_message_before, last_message_after, filename, in_, unread,
-            starred, limit, offset, view, db_session):
+            starred, limit, offset, view, db_session, sort_field='recentdate', sort_order='desc'):
 
     if view == 'count':
         query = db_session.query(func.count(Thread.id))
@@ -129,7 +129,20 @@ def threads(namespace_id, subject, from_addr, to_addr, cc_addr, bcc_addr,
         expand = (view == 'expanded')
         query = query.options(*Thread.api_loading_options(expand))
 
-    query = query.order_by(desc(Thread.recentdate)).limit(limit)
+    #Sort by field and direction
+    sort_field = sort_field.lower() if sort_field is not None else None
+    sort_order = sort_order.lower() if sort_order is not None else None
+    db_sort_field = Thread.recentdate
+    db_sort_order = desc
+
+    sort_field_mapping = {'subject': Thread.subject, 'date': Thread.recentdate, 'start_date': Thread.subjectdate}
+    if sort_field in sort_field_mapping:
+        db_sort_field = sort_field_mapping[sort_field]
+
+    if sort_order == 'asc':
+        db_sort_order = asc
+
+    query = query.order_by(db_sort_order(db_sort_field)).limit(limit)
 
     if offset:
         query = query.offset(offset)
@@ -145,7 +158,7 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
                        started_before, started_after, last_message_before,
                        last_message_after, received_before, received_after,
                        filename, in_, unread, starred, limit, offset, view,
-                       db_session):
+                       db_session, sort_field='recentdate', sort_order='desc'):
     # Warning: complexities ahead. This function sets up the query that gets
     # results for the /messages API. It loads from several tables, supports a
     # variety of views and filters, and is performance-critical for the API. As
@@ -335,7 +348,24 @@ def messages_or_drafts(namespace_id, drafts, subject, from_addr, to_addr,
         res = query(db_session).params(**param_dict).one()[0]
         return {"count": res}
 
-    query += lambda q: q.order_by(desc(Message.received_date))
+
+    # Sort by field and direction
+    sort_field = sort_field.lower() if sort_field is not None else None
+    sort_order = sort_order.lower() if sort_order is not None else None
+    db_sort_field = Message.received_date
+    db_sort_order = desc
+
+    sort_field_mapping = {'subject': Message.subject, 'date': Message.received_date}
+    if sort_field in sort_field_mapping:
+        db_sort_field = sort_field_mapping[sort_field]
+
+    if sort_order == 'asc':
+        print("!!!Change sort order to asc!!!!")
+        db_sort_order = asc
+
+    print("!!!!"+sort_order+"!!!!")
+
+    query += lambda q: q.order_by(db_sort_order(db_sort_field))
     query += lambda q: q.limit(bindparam('limit'))
     if offset:
         query += lambda q: q.offset(bindparam('offset'))
