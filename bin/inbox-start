@@ -34,7 +34,7 @@ socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
 
 @click.command()
-@click.option('--prod/--no-prod', default=False,
+@click.option('--prod/--no-prod', default=True,
               help='Disables the autoreloader and potentially other '
                    'non-production features.')
 @click.option('--enable-tracer/--disable-tracer', default=True,
