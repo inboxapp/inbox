@@ -437,7 +437,7 @@ def message_query_api():
     g.parser.add_argument('unread', type=strict_bool, location='args')
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
-    
+
 
     args = strict_parse_args(g.parser, request.args)
 
