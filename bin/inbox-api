@@ -32,7 +32,7 @@ http_server = None
 
 
 @click.command()
-@click.option('--prod/--no-prod', default=False,
+@click.option('--prod/--no-prod', default=True,
               help='Disables the autoreloader and potentially other '
                    'non-production features.')
 @click.option('--start-syncback/--no-start-syncback', default=True,
@@ -54,8 +54,10 @@ def main(prod, start_syncback, enable_tracer, config, port, enable_profiler):
         load_overrides(config_path)
 
     if prod:
+        print("Start in production mode")
         start(port, start_syncback, enable_tracer, enable_profiler)
     else:
+        print("!!! Start in development mode !!!")
         preflight()
         from werkzeug.serving import run_with_reloader
         run_with_reloader(lambda: start(port, start_syncback, enable_tracer,

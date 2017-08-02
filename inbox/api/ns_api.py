@@ -259,20 +259,19 @@ def thread_query_api():
     g.parser.add_argument('from', type=bounded_str, location='args')
     g.parser.add_argument('cc', type=bounded_str, location='args')
     g.parser.add_argument('bcc', type=bounded_str, location='args')
-    g.parser.add_argument('any_email', type=comma_separated_email_list,
-                          location='args')
+    g.parser.add_argument('any_email', type=comma_separated_email_list, location='args')
     g.parser.add_argument('started_before', type=timestamp, location='args')
     g.parser.add_argument('started_after', type=timestamp, location='args')
-    g.parser.add_argument('last_message_before', type=timestamp,
-                          location='args')
-    g.parser.add_argument('last_message_after', type=timestamp,
-                          location='args')
+    g.parser.add_argument('last_message_before', type=timestamp, location='args')
+    g.parser.add_argument('last_message_after', type=timestamp, location='args')
     g.parser.add_argument('filename', type=bounded_str, location='args')
     g.parser.add_argument('in', type=bounded_str, location='args')
     g.parser.add_argument('thread_id', type=valid_public_id, location='args')
     g.parser.add_argument('unread', type=strict_bool, location='args')
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
+    g.parser.add_argument('sort_field', type=bounded_str, location='args') #Nils: Field by which should be sorted
+    g.parser.add_argument('sort_order', type=bounded_str, location='args') #Nils: asc/desc sort order
 
     args = strict_parse_args(g.parser, request.args)
 
@@ -296,7 +295,9 @@ def thread_query_api():
         limit=args['limit'],
         offset=args['offset'],
         view=args['view'],
-        db_session=g.db_session)
+        db_session=g.db_session,
+        sort_field=args['sort_field'],
+        sort_order=args['sort_order'])
 
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id,
@@ -437,6 +438,7 @@ def message_query_api():
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
 
+
     args = strict_parse_args(g.parser, request.args)
 
     messages = filtering.messages_or_drafts(
@@ -462,7 +464,10 @@ def message_query_api():
         limit=args['limit'],
         offset=args['offset'],
         view=args['view'],
-        db_session=g.db_session)
+        db_session=g.db_session,
+        sort_field=args['sort_field'],
+        sort_order=args['sort_order']
+    )
 
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id, args['view'] == 'expanded')
