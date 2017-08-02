@@ -38,12 +38,27 @@ from inbox.transactions import delta_sync
 
 app = Blueprint('delta_stream_api',__name__,url_prefix='/delta_stream')
 
+def default_json_error(ex):
+    """ Exception -> flask JSON responder """ 
+    logger = get_logger()
+
+    logger.error('Uncaught error thrown by Flask/Werkzeug', exc_info=ex)
+    response = jsonify(message=str(ex), type='api_error')
+    response.status_code = (ex.code
+                            if isinstance(ex, HTTPException)
+                            else 500)
+
+
+    return response
 
 @app.route('/')
 def pull():
     pointer = int(request.values.get('pointer'))
-    result_limit = 100
+    result_limit = int(request.values.get('limit')) if 'limit' in request.values else  100
     output = {}
+    
+    if result_limit < 0 or result_limit > 10000:
+        return default_json_error('Invalid value for result_lmit')
 
     output['pointer_start'] = pointer
     with session_scope(0) as db_session:
