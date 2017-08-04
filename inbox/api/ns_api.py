@@ -464,9 +464,7 @@ def message_query_api():
         limit=args['limit'],
         offset=args['offset'],
         view=args['view'],
-        db_session=g.db_session,
-        sort_field=args['sort_field'],
-        sort_order=args['sort_order']
+        db_session=g.db_session
     )
 
     # Use a new encoder object with the expand parameter set.
