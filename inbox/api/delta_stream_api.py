@@ -15,6 +15,8 @@ import base64
 import gevent
 import itertools
 from pprint import pprint
+import time
+
 
 from sqlalchemy import asc, desc, bindparam
 from hashlib import sha256
@@ -53,6 +55,7 @@ def default_json_error(ex):
 
 @app.route('/')
 def pull():
+    start_time = time.time()
     pointer = int(request.values.get('pointer'))
     result_limit = int(request.values.get('limit')) if 'limit' in request.values else  100
     output = {}
@@ -66,5 +69,7 @@ def pull():
 
         output['deltas'] = deltas
         output['pointer_end'] = pointer_end
-
+    time_diff =  (time.time() - start_time)
+    output['runtime'] = time_diff
+    
     return jsonify(output)
