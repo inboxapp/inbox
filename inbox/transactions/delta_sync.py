@@ -226,7 +226,7 @@ def format_transactions_after_pointer(namespace, pointer, db_session,
                         obj, namespace_public_id=namespace_public_id, #namespace.public_id
                         expand=expand, is_n1=is_n1)
                     delta['attributes'] = repr_
-
+                delta['pointer_id'] = trx.id
                 results.append((trx.id, delta))
 
         if results:
