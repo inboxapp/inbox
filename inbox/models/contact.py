@@ -17,7 +17,7 @@ class Contact(MailSyncBase, HasRevisions, HasPublicID, HasEmailAddress,
     """Data for a user's contact."""
     API_OBJECT_NAME = 'contact'
 
-    namespace_id = Column(BigInteger, nullable=False, index=True)
+    namespace_id = Column(ForeignKey(Namespace.id, ondelete='CASCADE'), nullable=False, index=True)
     namespace = relationship(
         Namespace,
         primaryjoin='foreign(Contact.namespace_id) == remote(Namespace.id)',

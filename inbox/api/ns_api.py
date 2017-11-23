@@ -50,8 +50,10 @@ from inbox.sendmail.base import (create_message_from_json, update_draft,
                                  delete_draft, create_draft_from_mime,
                                  SendMailException)
 from inbox.ignition import engine_manager
+from inbox.heartbeat.status import clear_heartbeat_status
 from inbox.models.action_log import schedule_action
 from inbox.models.session import new_session, session_scope
+from inbox.models.util import delete_namespace
 from inbox.search.base import get_search_client, SearchBackendException, SearchStoreException
 from inbox.transactions import delta_sync
 from inbox.api.err import (err, APIException, NotFoundError, InputError,
@@ -240,13 +242,34 @@ def handle_generic_error(error):
     return response
 
 
-@app.route('/account')
+@app.route('/account', methods=['GET'])
 def one_account():
     g.parser.add_argument('view', type=view, location='args')
     args = strict_parse_args(g.parser, request.args)
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id, args['view'] == 'expanded')
     return encoder.jsonify(g.namespace)
+
+
+@app.route('/account', methods=['DELETE'])
+def account_delete():
+    account = g.namespace.account
+
+    account.disable_sync("account deleted")
+
+    g.db_session.commit()
+
+    try:
+        gevent.sleep(3)
+        delete_namespace(g.namespace.account_id, g.namespace.id)
+    except Exception as e:
+        log.error(e)
+        raise InputError('Account {} deletion failed.'.
+                         format(account.email_address))
+
+    clear_heartbeat_status(g.namespace.account_id)
+
+    return g.encoder.jsonify(None)
 
 
 #
@@ -259,20 +282,19 @@ def thread_query_api():
     g.parser.add_argument('from', type=bounded_str, location='args')
     g.parser.add_argument('cc', type=bounded_str, location='args')
     g.parser.add_argument('bcc', type=bounded_str, location='args')
-    g.parser.add_argument('any_email', type=comma_separated_email_list,
-                          location='args')
+    g.parser.add_argument('any_email', type=comma_separated_email_list, location='args')
     g.parser.add_argument('started_before', type=timestamp, location='args')
     g.parser.add_argument('started_after', type=timestamp, location='args')
-    g.parser.add_argument('last_message_before', type=timestamp,
-                          location='args')
-    g.parser.add_argument('last_message_after', type=timestamp,
-                          location='args')
+    g.parser.add_argument('last_message_before', type=timestamp, location='args')
+    g.parser.add_argument('last_message_after', type=timestamp, location='args')
     g.parser.add_argument('filename', type=bounded_str, location='args')
     g.parser.add_argument('in', type=bounded_str, location='args')
     g.parser.add_argument('thread_id', type=valid_public_id, location='args')
     g.parser.add_argument('unread', type=strict_bool, location='args')
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
+    g.parser.add_argument('sort_field', type=bounded_str, location='args') #Nils: Field by which should be sorted
+    g.parser.add_argument('sort_order', type=bounded_str, location='args') #Nils: asc/desc sort order
 
     args = strict_parse_args(g.parser, request.args)
 
@@ -296,7 +318,9 @@ def thread_query_api():
         limit=args['limit'],
         offset=args['offset'],
         view=args['view'],
-        db_session=g.db_session)
+        db_session=g.db_session,
+        sort_field=args['sort_field'],
+        sort_order=args['sort_order'])
 
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id,
@@ -437,6 +461,7 @@ def message_query_api():
     g.parser.add_argument('starred', type=strict_bool, location='args')
     g.parser.add_argument('view', type=view, location='args')
 
+
     args = strict_parse_args(g.parser, request.args)
 
     messages = filtering.messages_or_drafts(
@@ -462,7 +487,8 @@ def message_query_api():
         limit=args['limit'],
         offset=args['offset'],
         view=args['view'],
-        db_session=g.db_session)
+        db_session=g.db_session
+    )
 
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id, args['view'] == 'expanded')

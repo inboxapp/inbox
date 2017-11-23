@@ -42,8 +42,6 @@ bin/f2py
 bin/epylint
 
 # Packages
-*.egg
-*.egg-info
 dist
 build
 eggs

@@ -42,7 +42,7 @@ class OAuthAccount(object):
 
     @declared_attr
     def refresh_token_id(cls):
-        return Column(ForeignKey(Secret.id), nullable=False)
+        return Column(ForeignKey(Secret.id, ondelete='CASCADE'),  nullable=False)
 
     @declared_attr
     def secret(cls):
