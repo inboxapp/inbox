@@ -50,8 +50,10 @@ from inbox.sendmail.base import (create_message_from_json, update_draft,
                                  delete_draft, create_draft_from_mime,
                                  SendMailException)
 from inbox.ignition import engine_manager
+from inbox.heartbeat.status import clear_heartbeat_status
 from inbox.models.action_log import schedule_action
 from inbox.models.session import new_session, session_scope
+from inbox.models.util import delete_namespace
 from inbox.search.base import get_search_client, SearchBackendException, SearchStoreException
 from inbox.transactions import delta_sync
 from inbox.api.err import (err, APIException, NotFoundError, InputError,
@@ -240,13 +242,34 @@ def handle_generic_error(error):
     return response
 
 
-@app.route('/account')
+@app.route('/account', methods=['GET'])
 def one_account():
     g.parser.add_argument('view', type=view, location='args')
     args = strict_parse_args(g.parser, request.args)
     # Use a new encoder object with the expand parameter set.
     encoder = APIEncoder(g.namespace.public_id, args['view'] == 'expanded')
     return encoder.jsonify(g.namespace)
+
+
+@app.route('/account', methods=['DELETE'])
+def account_delete():
+    account = g.namespace.account
+
+    account.disable_sync("account deleted")
+
+    g.db_session.commit()
+
+    try:
+        gevent.sleep(3)
+        delete_namespace(g.namespace.account_id, g.namespace.id)
+    except Exception as e:
+        log.error(e)
+        raise InputError('Account {} deletion failed.'.
+                         format(account.email_address))
+
+    clear_heartbeat_status(g.namespace.account_id)
+
+    return g.encoder.jsonify(None)
 
 
 #
