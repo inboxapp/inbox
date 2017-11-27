@@ -16,6 +16,8 @@ from sqlalchemy.ext.associationproxy import association_proxy
 
 from nylas.logging import get_logger
 log = get_logger()
+
+from inbox.encryption.vault import encrypt as vault_encrypt
 from inbox.util.html import plaintext2html, strip_tags
 from inbox.sqlalchemy_ext.util import JSON, json_field_too_long, bakery
 from inbox.util.addr import parse_mimepart_address_header
@@ -103,6 +105,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     # max message_id_header is 998 characters
     message_id_header = Column(String(998), nullable=True)
     # There is no hard limit on subject limit in the spec, but 255 is common.
+    # @TODO: increase "subject" length for encryption
     subject = Column(String(255), nullable=True, default='')
     received_date = Column(DateTime, nullable=False, index=True)
     size = Column(Integer, nullable=False)
@@ -142,6 +145,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             self.state = 'actions_committed'
 
     _compacted_body = Column(LONGBLOB, nullable=True)
+    # @TODO: increase "snippet" length for encryption
     snippet = Column(String(191), nullable=False)
 
     # this might be a mail-parsing bug, or just a message from a bad client
@@ -255,7 +259,11 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         msg.data_sha256 = sha256(body_string).hexdigest()
 
         # Persist the raw MIME message to disk/ S3
-        save_to_blockstore(msg.data_sha256, body_string)
+        encrypted_body_string = vault_encrypt(
+            body_string,
+            account.namespace.public_id
+        )
+        save_to_blockstore(msg.data_sha256, encrypted_body_string)
 
         # Persist the processed message to the database
         msg.namespace_id = account.namespace.id
@@ -265,7 +273,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             # Non-persisted instance attribute used by EAS.
             msg.parsed_body = parsed
             msg._parse_metadata(parsed, body_string, received_date, account.id,
-                                folder_name, mid)
+                                account.namespace.public_id, folder_name, mid)
         except (mime.DecodingError, AttributeError, RuntimeError,
                 TypeError) as e:
             parsed = None
@@ -291,7 +299,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                               folder_name=folder_name, account_id=account.id,
                               error=e)
                     msg._mark_error()
-            msg.calculate_body(html_parts, plain_parts)
+            msg.calculate_body(html_parts, plain_parts, account.namespace.public_id)
 
             # Occasionally people try to send messages to way too many
             # recipients. In such cases, empty the field and treat as a parsing
@@ -309,7 +317,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         return msg
 
     def _parse_metadata(self, parsed, body_string, received_date,
-                        account_id, folder_name, mid):
+                        account_id, namespace_public_id, folder_name, mid):
         mime_version = parsed.headers.get('Mime-Version')
         # sometimes MIME-Version is '1.0 (1.0)', hence the .startswith()
         if mime_version is not None and not mime_version.startswith('1.0'):
@@ -317,7 +325,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                         account_id=account_id, folder_name=folder_name,
                         mid=mid, mime_version=mime_version)
 
-        self.subject = parsed.subject
+        self.subject = vault_encrypt(parsed.subject, namespace_public_id)
         self.from_addr = parse_mimepart_address_header(parsed, 'From')
         self.sender_addr = parse_mimepart_address_header(parsed, 'Sender')
         self.reply_to = parse_mimepart_address_header(parsed, 'Reply-To')
@@ -451,7 +459,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         if self.snippet is None:
             self.snippet = ''
 
-    def calculate_body(self, html_parts, plain_parts):
+    def calculate_body(self, html_parts, plain_parts, namespace_public_id):
         html_body = ''.join(html_parts).decode('utf-8').strip()
         plain_body = '\n'.join(plain_parts).decode('utf-8').strip()
         if html_body:
@@ -463,6 +471,9 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         else:
             self.body = u''
             self.snippet = u''
+
+        self.snippet = vault_encrypt(self.snippet, namespace_public_id)
+        self.body = vault_encrypt(self.body, namespace_public_id)
 
     def calculate_html_snippet(self, text):
         text = strip_tags(text)

@@ -24,6 +24,7 @@ else:
         return os.path.join(_data_file_directory(h), h)
 
 
+# TODO ENCRYPTION: encrypt data
 def save_to_blockstore(data_sha256, data):
     assert data is not None
     assert type(data) is not unicode
