@@ -34,7 +34,7 @@ def encrypt(plaintext, namespace_public_id):
         latency_millis = (end - start) * 1000
         print ''.join(['[vault] encryption latency is: ', str(latency_millis), 'ms'])
 
-        return result['data']['ciphertext'], 'utf-8'.encode('utf-8')
+        return result['data']['ciphertext'].encode('utf-8')
     except Exception as e:
         print e
         return ''
