@@ -32,10 +32,11 @@ def encrypt(plaintext, namespace_public_id):
 
         end = time.time()
         latency_millis = (end - start) * 1000
-        print ''.join('[vault] encryption latency is: ', str(latency_millis), 'ms')
+        print ''.join(['[vault] encryption latency is: ', str(latency_millis), 'ms'])
 
-        return result['data']['ciphertext']
-    except e:
+        return result['data']['ciphertext'], 'utf-8'.encode('utf-8')
+    except Exception as e:
+        print e
         return ''
 
 
@@ -57,10 +58,11 @@ def decrypt(ciphertext, namespace_public_id):
 
         end = time.time()
         latency_millis = (end - start) * 1000
-        print ''.join('[vault] decryption latency is: ', str(latency_millis), 'ms')
+        print ''.join(['[vault] decryption latency is: ', str(latency_millis), 'ms'])
 
-        return base64.b64decode(result['data']['plaintext'])
-    except e:
+        return base64.b64decode(result['data']['plaintext']).encode('utf-8')
+    except Exception as e:
+        print e
         return ''
 
 
