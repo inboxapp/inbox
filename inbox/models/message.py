@@ -106,7 +106,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     message_id_header = Column(String(998), nullable=True)
     # There is no hard limit on subject limit in the spec, but 255 is common.
     # @TODO: increase "subject" length for encryption
-    subject = Column(String(255), nullable=True, default='')
+    subject = Column(String(2047), nullable=True, default='')
     received_date = Column(DateTime, nullable=False, index=True)
     size = Column(Integer, nullable=False)
     data_sha256 = Column(String(255), nullable=True)
@@ -146,7 +146,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
     _compacted_body = Column(LONGBLOB, nullable=True)
     # @TODO: increase "snippet" length for encryption
-    snippet = Column(String(191), nullable=False)
+    snippet = Column(String(2047), nullable=False)
 
     # this might be a mail-parsing bug, or just a message from a bad client
     decode_error = Column(Boolean, server_default=false(), nullable=False,
