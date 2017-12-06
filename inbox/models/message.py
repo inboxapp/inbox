@@ -105,7 +105,6 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     # max message_id_header is 998 characters
     message_id_header = Column(String(998), nullable=True)
     # There is no hard limit on subject limit in the spec, but 255 is common.
-    # @TODO: increase "subject" length for encryption
     subject = Column(String(2047), nullable=True, default='')
     received_date = Column(DateTime, nullable=False, index=True)
     size = Column(Integer, nullable=False)
@@ -145,7 +144,6 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             self.state = 'actions_committed'
 
     _compacted_body = Column(LONGBLOB, nullable=True)
-    # @TODO: increase "snippet" length for encryption
     snippet = Column(String(2047), nullable=False)
 
     # this might be a mail-parsing bug, or just a message from a bad client
