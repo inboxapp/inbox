@@ -256,13 +256,6 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
         msg.data_sha256 = sha256(body_string).hexdigest()
 
-        # Persist the raw MIME message to disk/ S3
-        encrypted_body_string = vault_encrypt(
-            body_string,
-            account.namespace.public_id
-        )
-        save_to_blockstore(msg.data_sha256, encrypted_body_string)
-
         # Persist the processed message to the database
         msg.namespace_id = account.namespace.id
 
@@ -313,9 +306,16 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                     msg._mark_error()
 
         # TODO: implement batch encrypt
+        encrypted_body_string = vault_encrypt(
+            body_string,
+            account.namespace.public_id
+        )
         self.subject = vault_encrypt(self.subject, account.namespace.public_id)
         self.snippet = vault_encrypt(self.snippet, account.namespace.public_id)
         self.body = vault_encrypt(self.body, account.namespace.public_id)
+
+        # Persist the raw MIME message to disk/ S3
+        save_to_blockstore(msg.data_sha256, encrypted_body_string)
 
         return msg
 
