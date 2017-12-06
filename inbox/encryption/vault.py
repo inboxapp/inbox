@@ -26,8 +26,7 @@ def encrypt(plaintext, namespace_public_id):
     # TODO: add proper handling of exception
     try:
         result = client.write(
-            # 'transit/encrypt/' + namespace_public_id,
-            'transit/encrypt/some-name-key',
+            'transit/encrypt/account-' + namespace_public_id,
             plaintext=base64.b64encode(plaintext)
         )
 
@@ -53,8 +52,7 @@ def decrypt(ciphertext, namespace_public_id):
     # TODO: add proper handling of exception
     try:
         result = client.write(
-            # 'transit/decrypt/' + namespace_public_id,
-            'transit/decrypt/some-name-key',
+            'transit/decrypt/account-' + namespace_public_id,
             ciphertext=ciphertext
         )
 
