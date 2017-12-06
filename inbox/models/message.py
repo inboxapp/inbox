@@ -18,6 +18,7 @@ from nylas.logging import get_logger
 log = get_logger()
 
 from inbox.encryption.vault import encrypt as vault_encrypt
+from inbox.encryption.vault import encrypt_batch as vault_encrypt_batch
 from inbox.util.html import plaintext2html, strip_tags
 from inbox.sqlalchemy_ext.util import JSON, json_field_too_long, bakery
 from inbox.util.addr import parse_mimepart_address_header
@@ -305,17 +306,25 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                     setattr(msg, field, [])
                     msg._mark_error()
 
-        # TODO: implement batch encrypt
-        encrypted_body_string = vault_encrypt(
-            body_string,
-            account.namespace.public_id
-        )
-        self.subject = vault_encrypt(self.subject, account.namespace.public_id)
-        self.snippet = vault_encrypt(self.snippet, account.namespace.public_id)
-        self.body = vault_encrypt(self.body, account.namespace.public_id)
+        self.subject = self.subject if self.subject else ''
+        self.snippet = self.snippet if self.snippet else ''
+        self.body = self.body if self.body else ''
+
+        batch_input = [
+            {"plaintext": self.subject},
+            {"plaintext": self.snippet},
+            {"plaintext": self.body},
+            {"plaintext": body_string},
+        ]
+
+        encrypted_data = vault_encrypt_batch(batch_input, account.namespace.public_id)
+
+        self.subject = encrypted_data[0]
+        self.snippet = encrypted_data[1]
+        self.body = encrypted_data[2]
 
         # Persist the raw MIME message to disk/ S3
-        save_to_blockstore(msg.data_sha256, encrypted_body_string)
+        save_to_blockstore(msg.data_sha256, encrypted_data[3])
 
         return msg
 
