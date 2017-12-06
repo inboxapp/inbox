@@ -271,7 +271,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             # Non-persisted instance attribute used by EAS.
             msg.parsed_body = parsed
             msg._parse_metadata(parsed, body_string, received_date, account.id,
-                                account.namespace.public_id, folder_name, mid)
+                                folder_name, mid)
         except (mime.DecodingError, AttributeError, RuntimeError,
                 TypeError) as e:
             parsed = None
@@ -297,7 +297,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                               folder_name=folder_name, account_id=account.id,
                               error=e)
                     msg._mark_error()
-            msg.calculate_body(html_parts, plain_parts, account.namespace.public_id)
+            msg.calculate_body(html_parts, plain_parts)
 
             # Occasionally people try to send messages to way too many
             # recipients. In such cases, empty the field and treat as a parsing
@@ -312,10 +312,15 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                     setattr(msg, field, [])
                     msg._mark_error()
 
+        # TODO: implement batch encrypt
+        self.subject = vault_encrypt(self.subject, account.namespace.public_id)
+        self.snippet = vault_encrypt(self.snippet, account.namespace.public_id)
+        self.body = vault_encrypt(self.body, account.namespace.public_id)
+
         return msg
 
     def _parse_metadata(self, parsed, body_string, received_date,
-                        account_id, namespace_public_id, folder_name, mid):
+                        account_id, folder_name, mid):
         mime_version = parsed.headers.get('Mime-Version')
         # sometimes MIME-Version is '1.0 (1.0)', hence the .startswith()
         if mime_version is not None and not mime_version.startswith('1.0'):
@@ -323,7 +328,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                         account_id=account_id, folder_name=folder_name,
                         mid=mid, mime_version=mime_version)
 
-        self.subject = vault_encrypt(parsed.subject, namespace_public_id)
+        self.subject = parsed.subject
         self.from_addr = parse_mimepart_address_header(parsed, 'From')
         self.sender_addr = parse_mimepart_address_header(parsed, 'Sender')
         self.reply_to = parse_mimepart_address_header(parsed, 'Reply-To')
@@ -457,7 +462,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         if self.snippet is None:
             self.snippet = ''
 
-    def calculate_body(self, html_parts, plain_parts, namespace_public_id):
+    def calculate_body(self, html_parts, plain_parts):
         html_body = ''.join(html_parts).decode('utf-8').strip()
         plain_body = '\n'.join(plain_parts).decode('utf-8').strip()
         if html_body:
@@ -469,9 +474,6 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         else:
             self.body = u''
             self.snippet = u''
-
-        self.snippet = vault_encrypt(self.snippet, namespace_public_id)
-        self.body = vault_encrypt(self.body, namespace_public_id)
 
     def calculate_html_snippet(self, text):
         text = strip_tags(text)
