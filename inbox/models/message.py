@@ -317,7 +317,8 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             {"plaintext": body_string},
         ]
 
-        encrypted_data = vault_encrypt_batch(batch_input, account.namespace.public_id)
+        named_key = 'account-' + account.namespace.public_id
+        encrypted_data = vault_encrypt_batch(batch_input, named_key)
 
         self.subject = encrypted_data[0]
         self.snippet = encrypted_data[1]
