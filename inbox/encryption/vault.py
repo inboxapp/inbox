@@ -59,7 +59,7 @@ def encrypt_batch(batch_input, named_key):
     if len(batch_input) == 0:
         return []
 
-    # start = time.time()
+    start = time.time()
 
     batch_input = [
         {'plaintext': base64.b64encode(element['plaintext'])}
@@ -73,9 +73,9 @@ def encrypt_batch(batch_input, named_key):
             batch_input=batch_input
         )
 
-        # end = time.time()
-        # latency_millis = (end - start) * 1000
-        # print ''.join(['[vault] encryption latency is: ', str(latency_millis), 'ms'])
+        end = time.time()
+        latency_millis = (end - start) * 1000
+        print ''.join(['[vault] encryption latency is: ', str(latency_millis), 'ms'])
 
         return [
             element['ciphertext'].encode('utf-8')

@@ -306,23 +306,21 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                     setattr(msg, field, [])
                     msg._mark_error()
 
-        self.subject = self.subject if self.subject else ''
-        self.snippet = self.snippet if self.snippet else ''
-        self.body = self.body if self.body else ''
+        content_data = msg._get_content()
 
         batch_input = [
-            {"plaintext": self.subject},
-            {"plaintext": self.snippet},
-            {"plaintext": self.body},
-            {"plaintext": body_string},
+            {'plaintext': content_data['subject']},
+            {'plaintext': content_data['snippet']},
+            {'plaintext': content_data['body']},
+            {'plaintext': body_string},
         ]
 
         named_key = 'account-' + account.namespace.public_id
         encrypted_data = vault_encrypt_batch(batch_input, named_key)
 
-        self.subject = encrypted_data[0]
-        self.snippet = encrypted_data[1]
-        self.body = encrypted_data[2]
+        msg.subject = encrypted_data[0]
+        msg.snippet = encrypted_data[1]
+        msg.body = encrypted_data[2]
 
         # Persist the raw MIME message to disk/ S3
         save_to_blockstore(msg.data_sha256, encrypted_data[3])
@@ -471,6 +469,13 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             self.body = ''
         if self.snippet is None:
             self.snippet = ''
+
+    def _get_content(self):
+        return {
+            'subject': self.subject if self.subject else '',
+            'snippet': self.snippet if self.snippet else '',
+            'body': self.body if self.body else '',
+        }
 
     def calculate_body(self, html_parts, plain_parts):
         html_body = ''.join(html_parts).decode('utf-8').strip()
