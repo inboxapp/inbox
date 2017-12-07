@@ -62,7 +62,7 @@ def encrypt_batch(batch_input, named_key):
     start = time.time()
 
     batch_input = [
-        {'plaintext': base64.b64encode(element['plaintext'])}
+        {'plaintext': base64.b64encode(element['plaintext'].encode('utf-8'))}
         for element
         in batch_input
     ]
