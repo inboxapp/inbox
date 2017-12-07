@@ -308,11 +308,14 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
         content_data = msg._get_content()
 
+        if not isinstance(body_string, unicode):
+            body_string = body_string.decode('utf-8')
+
         batch_input = [
-            {'plaintext': content_data['subject']},
-            {'plaintext': content_data['snippet']},
-            {'plaintext': content_data['body']},
-            {'plaintext': body_string},
+            content_data['subject'],
+            content_data['snippet'],
+            content_data['body'],
+            body_string,
         ]
 
         named_key = 'account-' + account.namespace.public_id
