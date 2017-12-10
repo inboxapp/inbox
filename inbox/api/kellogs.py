@@ -146,6 +146,7 @@ def _encode(obj, namespace_public_id=None, expand=False, is_n1=False):
             'body': obj.body,
             'unread': not obj.is_read,
             'starred': obj.is_starred,
+            'encrypted': obj.encrypted,
             'files': obj.api_attachment_metadata,
             'events': [encode(e) for e in obj.events]
         }
