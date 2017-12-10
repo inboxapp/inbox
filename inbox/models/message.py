@@ -324,7 +324,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         msg.subject = encrypted_data[0]
         msg.snippet = encrypted_data[1]
         msg.body = encrypted_data[2]
-        msg.encrypted = True
+        msg.encrypted = 1
 
         # Persist the raw MIME message to disk/ S3
         save_to_blockstore(msg.data_sha256, encrypted_data[3])
