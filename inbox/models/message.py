@@ -118,7 +118,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     is_draft = Column(Boolean, server_default=false(), nullable=False)
     is_sent = Column(Boolean, server_default=false(), nullable=False)
 
-    is_encrypted = Column(Boolean, server_default=false(), nullable=False)
+    encrypted = Column(Boolean, server_default=false(), nullable=False)
 
     # REPURPOSED
     state = Column(Enum('draft', 'sending', 'sending failed', 'sent',
@@ -326,7 +326,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         msg.subject = encrypted_data[0]
         msg.snippet = encrypted_data[1]
         msg.body = encrypted_data[2]
-        msg.is_encrypted = 1
+        msg.encrypted = 1
 
         # Persist the raw MIME message to disk/ S3
         save_to_blockstore(msg.data_sha256, encrypted_data[3])
@@ -620,7 +620,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                    'bcc_addr', 'is_read', 'is_starred', 'received_date',
                    'is_sent', 'subject', 'snippet', 'version', 'from_addr',
                    'to_addr', 'cc_addr', 'bcc_addr', 'reply_to',
-                   '_compacted_body', 'thread_id', 'namespace_id', 'is_encrypted']
+                   '_compacted_body', 'thread_id', 'namespace_id', 'encrypted']
         if expand:
             columns += ['message_id_header', 'in_reply_to', 'references']
         return (

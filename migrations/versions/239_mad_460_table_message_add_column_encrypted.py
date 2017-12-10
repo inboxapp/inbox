@@ -17,10 +17,10 @@ from sqlalchemy.sql import text
 def upgrade():
     conn = op.get_bind()
     conn.execute(text("ALTER TABLE message"
-                      " ADD column is_encrypted tinyint(1) DEFAULT 0"))
+                      " ADD column encrypted tinyint(1) DEFAULT 0"))
 
 
 def downgrade():
     conn = op.get_bind()
     conn.execute(text("ALTER TABLE message"
-                      " DROP column is_encrypted"))
+                      " DROP column encrypted"))
