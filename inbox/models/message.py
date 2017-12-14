@@ -310,14 +310,14 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
 
         content_data = msg._get_content()
 
-        if not isinstance(body_string, unicode):
-            body_string = body_string.decode('utf-8')
+        # if not isinstance(body_string, unicode):
+        #     body_string = body_string.decode('utf-8')
 
         batch_input = [
             content_data['subject'],
             content_data['snippet'],
             content_data['body'],
-            body_string,
+            # body_string,
         ]
 
         named_key = 'account-' + account.namespace.public_id
@@ -329,7 +329,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         msg.encrypted = 1
 
         # Persist the raw MIME message to disk/ S3
-        save_to_blockstore(msg.data_sha256, encrypted_data[3])
+        # save_to_blockstore(msg.data_sha256, encrypted_data[3])
 
         return msg
 
