@@ -23,7 +23,7 @@ from flanker.mime.message.headers.encoding import encode_string
 try:
     from flanker.addresslib.parser import MAX_ADDRESS_LENGTH
 except:
-    MAX_ADDRESS_LENGTH = 25
+    MAX_ADDRESS_LENGTH = 1024
 from html2text import html2text
 
 VERSION = pkg_resources.get_distribution('inbox-sync').version
