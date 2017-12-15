@@ -20,7 +20,10 @@ from flanker import mime
 from flanker.addresslib import address
 from flanker.addresslib.quote import smart_quote
 from flanker.mime.message.headers.encoding import encode_string
-from flanker.addresslib.parser import MAX_ADDRESS_LENGTH
+try:
+    from flanker.addresslib.parser import MAX_ADDRESS_LENGTH
+except:
+    MAX_ADDRESS_LENGTH = 25
 from html2text import html2text
 
 VERSION = pkg_resources.get_distribution('inbox-sync').version
