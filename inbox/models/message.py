@@ -5,6 +5,9 @@ import itertools
 from hashlib import sha256
 from collections import defaultdict
 
+from inbox.config import config
+vault_config = config.get('VAULT')
+
 from flanker import mime
 from sqlalchemy import (Column, Integer, BigInteger, String, DateTime, ForeignKey,
                         Boolean, Enum, Index, bindparam)
@@ -313,23 +316,24 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         # if not isinstance(body_string, unicode):
         #     body_string = body_string.decode('utf-8')
 
-        batch_input = [
-            content_data['subject'],
-            content_data['snippet'],
-            content_data['body'],
-            # body_string,
-        ]
+        if vault_config['ENABLED']:
+            batch_input = [
+                content_data['subject'],
+                content_data['snippet'],
+                content_data['body'],
+                # body_string,
+            ]
 
-        named_key = 'account-' + account.namespace.public_id
-        encrypted_data = vault_encrypt_batch(batch_input, named_key)
+            named_key = 'account-' + account.namespace.public_id
+            encrypted_data = vault_encrypt_batch(batch_input, named_key)
 
-        msg.subject = encrypted_data[0]
-        msg.snippet = encrypted_data[1]
-        msg.body = encrypted_data[2]
-        msg.encrypted = 1
+            msg.subject = encrypted_data[0]
+            msg.snippet = encrypted_data[1]
+            msg.body = encrypted_data[2]
+            msg.encrypted = 1
 
-        # Persist the raw MIME message to disk/ S3
-        # save_to_blockstore(msg.data_sha256, encrypted_data[3])
+            # Persist the raw MIME message to disk/ S3
+            # save_to_blockstore(msg.data_sha256, encrypted_data[3])
 
         return msg
 

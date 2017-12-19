@@ -15,6 +15,9 @@ client.auth_approle(vault_config['APP_ROLE_ID'], vault_config['APP_ROLE_SECRET_I
 
 
 def encrypt(plaintext, named_key):
+    if not vault_config['ENABLED']:
+        return None
+
     if not plaintext:
         return ''
 
@@ -34,6 +37,9 @@ def encrypt(plaintext, named_key):
 
 
 def decrypt(ciphertext, named_key):
+    if not vault_config['ENABLED']:
+        return None
+
     if not ciphertext:
         return ''
 
@@ -53,6 +59,9 @@ def decrypt(ciphertext, named_key):
 
 
 def encrypt_batch(batch_input, named_key):
+    if not vault_config['ENABLED']:
+        return None
+
     if not isinstance(batch_input, list):
         return []
 
