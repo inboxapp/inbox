@@ -5,8 +5,11 @@ import itertools
 from hashlib import sha256
 from collections import defaultdict
 
+from inbox.config import config
+vault_config = config.get('VAULT')
+
 from flanker import mime
-from sqlalchemy import (Column, Integer, BigInteger, String, DateTime,
+from sqlalchemy import (Column, Integer, BigInteger, String, DateTime, ForeignKey,
                         Boolean, Enum, Index, bindparam)
 from sqlalchemy.dialects.mysql import LONGBLOB
 from sqlalchemy.orm import (relationship, backref, validates, joinedload,
@@ -16,6 +19,8 @@ from sqlalchemy.ext.associationproxy import association_proxy
 
 from nylas.logging import get_logger
 log = get_logger()
+
+from inbox.encryption.vault import encrypt_batch as vault_encrypt_batch
 from inbox.util.html import plaintext2html, strip_tags
 from inbox.sqlalchemy_ext.util import JSON, json_field_too_long, bakery
 from inbox.util.addr import parse_mimepart_address_header
@@ -26,6 +31,7 @@ from inbox.models.mixins import (HasPublicID, HasRevisions, UpdatedAtMixin,
                                  DeletedAtMixin)
 from inbox.models.base import MailSyncBase
 from inbox.models.category import Category
+from inbox.models.namespace import Namespace
 
 from inbox.sqlalchemy_ext.util import MAX_MYSQL_INTEGER
 from inbox.util.encoding import unicode_safe_truncate
@@ -64,7 +70,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     def API_OBJECT_NAME(self):
         return 'message' if not self.is_draft else 'draft'
 
-    namespace_id = Column(BigInteger, index=True, nullable=False)
+    namespace_id = Column(ForeignKey(Namespace.id, ondelete='CASCADE'), index=True, nullable=False)
     namespace = relationship(
         'Namespace',
         primaryjoin='foreign(Message.namespace_id) == remote(Namespace.id)',  # noqa
@@ -102,7 +108,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     # max message_id_header is 998 characters
     message_id_header = Column(String(998), nullable=True)
     # There is no hard limit on subject limit in the spec, but 255 is common.
-    subject = Column(String(255), nullable=True, default='')
+    subject = Column(String(2047), nullable=True, default='')
     received_date = Column(DateTime, nullable=False, index=True)
     size = Column(Integer, nullable=False)
     data_sha256 = Column(String(255), nullable=True)
@@ -113,6 +119,8 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
     # For drafts (both Nylas-created and otherwise)
     is_draft = Column(Boolean, server_default=false(), nullable=False)
     is_sent = Column(Boolean, server_default=false(), nullable=False)
+
+    encrypted = Column(Boolean, server_default=false(), nullable=False)
 
     # REPURPOSED
     state = Column(Enum('draft', 'sending', 'sending failed', 'sent',
@@ -141,7 +149,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             self.state = 'actions_committed'
 
     _compacted_body = Column(LONGBLOB, nullable=True)
-    snippet = Column(String(191), nullable=False)
+    snippet = Column(String(2047), nullable=False)
 
     # this might be a mail-parsing bug, or just a message from a bad client
     decode_error = Column(Boolean, server_default=false(), nullable=False,
@@ -240,6 +248,8 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
             The full message including headers (encoded).
 
         """
+        global vault_config
+
         _rqd = [account, mid, folder_name, body_string]
         if not all([v is not None for v in _rqd]):
             raise ValueError(
@@ -252,9 +262,6 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         msg = Message()
 
         msg.data_sha256 = sha256(body_string).hexdigest()
-
-        # Persist the raw MIME message to disk/ S3
-        save_to_blockstore(msg.data_sha256, body_string)
 
         # Persist the processed message to the database
         msg.namespace_id = account.namespace.id
@@ -304,6 +311,30 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                               mid=mid)
                     setattr(msg, field, [])
                     msg._mark_error()
+
+        content_data = msg._get_content()
+
+        # if not isinstance(body_string, unicode):
+        #     body_string = body_string.decode('utf-8')
+
+        if vault_config['ENABLED']:
+            batch_input = [
+                content_data['subject'],
+                content_data['snippet'],
+                content_data['body'],
+                # body_string,
+            ]
+
+            named_key = 'account-' + account.namespace.public_id
+            encrypted_data = vault_encrypt_batch(batch_input, named_key)
+
+            msg.subject = encrypted_data[0]
+            msg.snippet = encrypted_data[1]
+            msg.body = encrypted_data[2]
+            msg.encrypted = 1
+
+            # Persist the raw MIME message to disk/ S3
+            # save_to_blockstore(msg.data_sha256, encrypted_data[3])
 
         return msg
 
@@ -450,6 +481,13 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
         if self.snippet is None:
             self.snippet = ''
 
+    def _get_content(self):
+        return {
+            'subject': self.subject if self.subject else '',
+            'snippet': self.snippet if self.snippet else '',
+            'body': self.body if self.body else '',
+        }
+
     def calculate_body(self, html_parts, plain_parts):
         html_body = ''.join(html_parts).decode('utf-8').strip()
         plain_body = '\n'.join(plain_parts).decode('utf-8').strip()
@@ -587,7 +625,7 @@ class Message(MailSyncBase, HasRevisions, HasPublicID, UpdatedAtMixin,
                    'bcc_addr', 'is_read', 'is_starred', 'received_date',
                    'is_sent', 'subject', 'snippet', 'version', 'from_addr',
                    'to_addr', 'cc_addr', 'bcc_addr', 'reply_to',
-                   '_compacted_body', 'thread_id', 'namespace_id']
+                   '_compacted_body', 'thread_id', 'namespace_id', 'encrypted']
         if expand:
             columns += ['message_id_header', 'in_reply_to', 'references']
         return (
@@ -623,7 +661,7 @@ Index('ix_message_namespace_id_message_id_header_subject',
 
 class MessageCategory(MailSyncBase):
     """ Mapping between messages and categories. """
-    message_id = Column(BigInteger, nullable=False)
+    message_id = Column(ForeignKey(Message.id, ondelete='CASCADE'), nullable=False)
     message = relationship(
         'Message',
         primaryjoin='foreign(MessageCategory.message_id) == remote(Message.id)',  # noqa

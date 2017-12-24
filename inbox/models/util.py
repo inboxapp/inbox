@@ -131,7 +131,7 @@ def batch_delete_namespaces(ids_to_delete, throttle=False,
              time=end - start, count=deleted_count)
 
 
-def delete_namespace(namespace_id, throttle=False, dry_run=False):
+def delete_namespace(account_id, namespace_id, throttle=False, dry_run=False):
     """
     Delete all the data associated with a namespace from the database.
     USE WITH CAUTION.

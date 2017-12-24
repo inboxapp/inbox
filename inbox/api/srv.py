@@ -1,7 +1,11 @@
+from __future__ import print_function
 from flask import Flask, request, jsonify, make_response, g
 from flask.ext.restful import reqparse
 from werkzeug.exceptions import default_exceptions, HTTPException
 from sqlalchemy.orm.exc import NoResultFound
+import hashlib
+import uuid
+import os
 
 from inbox.api.kellogs import APIEncoder
 from nylas.logging import get_logger
@@ -13,6 +17,8 @@ from inbox.api.validation import valid_public_id
 
 from ns_api import app as ns_api
 from ns_api import DEFAULT_LIMIT
+from auth_api import app as auth_api
+from delta_stream_api import app as delta_stream_api
 
 from inbox.webhooks.gpush_notifications import app as webhooks_api
 
@@ -37,15 +43,32 @@ for code in default_exceptions.iterkeys():
     app.error_handler_spec[None][code] = default_json_error
 
 
+#---------------------- Authentication -------------------------------
+
 @app.before_request
 def auth():
     """ Check for account ID on all non-root URLS """
-    if request.path in ('/accounts', '/accounts/', '/') \
-            or request.path.startswith('/w/'):
+
+    # Public routes, no authentication
+    if request.path.startswith('/auth/'):
         return
 
-    if not request.authorization or not request.authorization.username:
+    #Admin routes
+    if request.path.startswith('/w/') or \
+            request.path.startswith('/accounts') or \
+            request.path.startswith('/delta_stream'):
+        return auth_admin(request)
 
+    #User specific routes
+    return auth_user(request)
+
+
+def auth_user(request):
+    """
+        Authentication for user-specific routes, for example
+        getting messages for one user
+    """
+    if not request.authorization or not request.authorization.username:
         AUTH_ERROR_MSG = ("Could not verify access credential.", 401,
                           {'WWW-Authenticate': 'Basic realm="API '
                               'Access Token Required"'})
@@ -57,10 +80,9 @@ def auth():
 
         parts = auth_header.split()
 
-        if (len(parts) != 2 or parts[0].lower() != 'bearer' or not parts[1]):
+        if len(parts) != 2 or parts[0].lower() != 'bearer' or not parts[1]:
             return make_response(AUTH_ERROR_MSG)
         namespace_public_id = parts[1]
-
     else:
         namespace_public_id = request.authorization.username
 
@@ -76,6 +98,41 @@ def auth():
                 "Could not verify access credential.", 401,
                 {'WWW-Authenticate': 'Basic realm="API '
                  'Access Token Required"'}))
+
+
+def auth_admin(request):
+    """
+        Authentication for global (admin routes)
+    """
+    AUTH_ERROR_MSG = ("Could not verify access credential.", 401,
+                      {'WWW-Authenticate': 'Basic realm="API-ADMIN '
+                                           'Access Token Required"'})
+
+    if not request.authorization or not request.authorization.username or not request.authorization.password:
+        return make_response(AUTH_ERROR_MSG)
+    else:
+        username = request.authorization.username
+        password = request.authorization.password
+
+        admin_password = os.environ['NYLAS_ADMIN_PASSWORD']
+
+        if username == 'admin' and check_password(admin_password, password):
+            return
+
+    return make_response(AUTH_ERROR_MSG)
+
+
+def hash_password(password):
+    # uuid is used to generate a random number
+    salt = uuid.uuid4().hex
+    return hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
+
+
+def check_password(hashed_password, user_password):
+    password, salt = hashed_password.split(':')
+    return password == hashlib.sha256(salt.encode() + user_password.encode()).hexdigest()
+
+#---------------------- / Authentication -------------------------------
 
 
 @app.after_request
@@ -129,5 +186,11 @@ def logout():
         {'WWW-Authenticate': 'Basic realm="API Access Token Required"'}))
 
 
+# :: Added APIs ::
+app.register_blueprint(auth_api) # /auth/...
+app.register_blueprint(delta_stream_api) # /auth/...
+
+# :: Original APIs ::
 app.register_blueprint(ns_api)
 app.register_blueprint(webhooks_api)  # /w/...
+
