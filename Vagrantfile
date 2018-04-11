@@ -29,6 +29,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   #   "--natdnsproxy1", "on",
   # ]
   config.vm.network "private_network", ip: "192.168.10.200"
+  config.vm.provision :shell, :inline => "echo 'export PYTHONPATH=/vagrant' > /etc/profile.d/vagrant.sh; chmod +x /etc/profile.d/vagrant.sh"
   config.vm.provision :shell, :inline => "apt-get update -q && cd /vagrant && ./setup.sh"
 
   # Share ports 5000 - 5009

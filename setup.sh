@@ -178,10 +178,10 @@ fi
 color '35;1' 'Ensuring setuptools and pip versions...'
 # Need up-to-date pyparsing or upgrading pip will break pip
 # https://github.com/pypa/packaging/issues/94
-pip install 'pyparsing==2.2.0'
+pip install -i https://pypi.python.org/simple 'pyparsing==2.2.0'
 # If python-setuptools is actually the old 'distribute' fork of setuptools,
 # then the first 'pip install setuptools' will be a no-op.
-pip install 'pip==9.0.1' 'setuptools==34.3.1'
+pip install -i https://pypi.python.org/simple 'pip==9.0.1' 'setuptools==34.3.1'
 hash pip        # /usr/bin/pip might now be /usr/local/bin/pip
 pip install 'pip==9.0.1' 'setuptools==34.3.1'
 
@@ -198,9 +198,12 @@ cd "$src_dir"
 color '35;1' 'Removing .pyc files...'   # they might be stale
 find . -name \*.pyc -delete
 
+color '35;1' 'Temporarily removing python-chardet (to resolve conflict, will re-install in next step)'
+apt-get remove -y python-chardet
+
 color '35;1' 'Installing dependencies from pip...'
-SODIUM_INSTALL=system pip install -r requirements.txt
-pip install -e .
+SODIUM_INSTALL=system pip install --disable-pip-version-check -r requirements.txt
+pip install  --disable-pip-version-check -e .
 
 color '35;1' 'Finished installing dependencies.'
 
@@ -274,7 +277,7 @@ if ! $prod; then
         fi
     fi
 
-    mysqld_safe &
+    # mysqld_safe & # I think 'upstart' does this for us?
     sleep 10
 
     env NYLAS_ENV=dev bin/create-db
