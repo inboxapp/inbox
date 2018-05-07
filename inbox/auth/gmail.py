@@ -223,14 +223,7 @@ class GmailAuthHandler(OAuthAuthHandler):
         return validation_dict
 
     def interactive_auth(self, email_address=None):
-        url_args = {'redirect_uri': self.OAUTH_REDIRECT_URI,
-                    'client_id': self.OAUTH_CLIENT_ID,
-                    'response_type': 'code',
-                    'scope': self.OAUTH_SCOPE,
-                    'access_type': 'offline'}
-        if email_address:
-            url_args['login_hint'] = email_address
-        url = url_concat(self.OAUTH_AUTHENTICATE_URL, url_args)
+        url = self.get_oauth_url(email_address)
 
         print 'To authorize Nylas, visit this URL and follow the directions:'
         print '\n{}'.format(url)
@@ -245,6 +238,19 @@ class GmailAuthHandler(OAuthAuthHandler):
             except OAuthError:
                 print "\nInvalid authorization code, try again...\n"
                 auth_code = None
+
+
+    def get_oauth_url(self, email_address=None):
+        url_args = {'redirect_uri': self.OAUTH_REDIRECT_URI,
+                    'client_id': self.OAUTH_CLIENT_ID,
+                    'response_type': 'code',
+                    'scope': self.OAUTH_SCOPE,
+                    'access_type': 'offline'}
+        if email_address:
+            url_args['login_hint'] = email_address
+        url = url_concat(self.OAUTH_AUTHENTICATE_URL, url_args)
+
+        return url
 
 
 def _process_imap_exception(exc):
