@@ -90,7 +90,7 @@ class GoogleEventsProvider(object):
 
         Returns
         -------
-        A list of uncommited Event instances.
+        A list of uncommitted Event instances.
         """
         updates = []
         items = self._get_raw_events(calendar_uid, sync_from_time)
